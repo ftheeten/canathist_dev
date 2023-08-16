@@ -64,7 +64,6 @@ def ocr_extract(p_files, p_o_files):
                 #print(ratio_height)
                 
                 page_arr_gray = cv2.cvtColor(page_arr,cv2.COLOR_BGR2GRAY)
-                text=pytesseract.image_to_string(page_arr_gray)
                 data = pytesseract.image_to_data(page_arr_gray, output_type='dict')
                 #print(text)
                 j=0

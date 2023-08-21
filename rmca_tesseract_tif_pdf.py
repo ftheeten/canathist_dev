@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout , QFileDialog, QButtonGroup, QRadioButton, QLineEdit, QLabel
+from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout , QFileDialog, QButtonGroup, QRadioButton, QLineEdit, QLabel, QCheckBox, QMessageBox
 from PySide6.QtCore import Qt
 import os
 import io
@@ -32,6 +32,8 @@ filenames=[]
 output_pdf_file=None
 input_height=None
 input_tesseract=None
+chkJPEG=None
+input_ratioJPEG=None
 
 CONFIG_FILE="config.cfg"
 TESSERACT_PATH=""
@@ -41,6 +43,8 @@ HEIGHT_IMAGE_CM=""
 USER_HEIGHT_IMAGE_CM=""
 USER_HEIGHT_IMAGE_PX=""
 PIXEL_PER_CM=""
+JPEG_RATIO=""
+USER_JPEG_RATIO=""
 
 
 
@@ -123,7 +127,10 @@ def ocr_extract(p_input_file):
         s = str(e1)
         print("\r\nError: "+s)
  
-def generate_pdf(p_input_files, p_output_file):
+def generate_pdf(p_input_files, p_output_file, convert_to_jpeg):
+    global USER_JPEG_RATIO
+    global input_ratioJPEG
+    global window
     try:
         print("generating  temporary PDF")
         print("loading file...")
@@ -132,18 +139,52 @@ def generate_pdf(p_input_files, p_output_file):
         p_input_files.sort()
         print("nb pages="+str(len(p_input_files)))
         for i, image_path in enumerate(p_input_files):
-            #print(i)
-            if (i+1)%10==0:
-                print("page (intermediate PDF) "+str(i+1)+"/"+str(len(p_input_files)))
-                display_time()
-            image =  cv2.imread(image_path)
-            size_ratio=resize_image_target_height( image)
-            can.setPageSize((image.shape[1]*size_ratio,image.shape[0]*size_ratio))
-            
-            page_arr_gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-            
-            can.drawImage(image_path, 0, 0, width=image.shape[1]*size_ratio, height=image.shape[0]*size_ratio)            
-            can.showPage()
+            if convert_to_jpeg:
+                USER_JPEG_RATIO=input_ratioJPEG.text()
+                go_jpeg=False
+                int_USER_JPEG_RATIO=0
+                try:
+                    int_USER_JPEG_RATIO=int(USER_JPEG_RATIO)
+                    go_jpeg=True
+                except Exception:
+                    QMessageBox.about(window, 'Error','JPEG Ratio can only be a number')
+                    return
+                if go_jpeg:
+                    if int_USER_JPEG_RATIO<0 or int_USER_JPEG_RATIO>100:
+                        QMessageBox.about(window, 'Error','JPEG must be between 0 and 100')
+                        go_jpeg=False
+                        return
+                if go_jpeg:
+                    #print(i)
+                    image_ori = cv2.imread(image_path)
+                    tmp_jpg=image_path+"_tmp_ocr.jpg"
+                    cv2.imwrite(tmp_jpg, image_ori, [int(cv2.IMWRITE_JPEG_QUALITY), int_USER_JPEG_RATIO])
+                        
+                    if (i+1)%10==0:
+                        print("page (intermediate PDF) "+str(i+1)+"/"+str(len(p_input_files)))
+                        display_time()
+                    image =  cv2.imread(tmp_jpg)
+                    size_ratio=resize_image_target_height( image)
+                    can.setPageSize((image.shape[1]*size_ratio,image.shape[0]*size_ratio))
+                        
+                    page_arr_gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+                        
+                    can.drawImage(tmp_jpg, 0, 0, width=image.shape[1]*size_ratio, height=image.shape[0]*size_ratio)            
+                    can.showPage()
+                    os.remove(tmp_jpg)
+            else:
+                #print(i)
+                if (i+1)%10==0:
+                    print("page (intermediate PDF) "+str(i+1)+"/"+str(len(p_input_files)))
+                    display_time()
+                image =  cv2.imread(image_path)
+                size_ratio=resize_image_target_height( image)
+                can.setPageSize((image.shape[1]*size_ratio,image.shape[0]*size_ratio))
+                
+                page_arr_gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+                
+                can.drawImage(image_path, 0, 0, width=image.shape[1]*size_ratio, height=image.shape[0]*size_ratio)            
+                can.showPage()
         can.save()
         can=None
         print("Done")
@@ -185,10 +226,13 @@ def launch_ocr():
     global console
     global input_height
     global input_tesseract
+    global chkJPEG
     global USER_HEIGHT_IMAGE_CM
     global USER_HEIGHT_IMAGE_PX
     global PIXEL_PER_CM
     global USER_TESSERACT_PATH
+    global JPEG_RATIO
+    global USER_JPEG_RATIO
 
     
     if output_pdf_file is None or filenames is None:
@@ -202,7 +246,7 @@ def launch_ocr():
         print("user height "+str(USER_HEIGHT_IMAGE_CM)+"cm")
         print("user height "+str(USER_HEIGHT_IMAGE_PX)+"pixels")
         temp=output_pdf_file
-        generate_pdf(filenames, temp)
+        generate_pdf(filenames, temp, chkJPEG)
         ocr_extract(temp)        
 
         print("DONE FOR "+output_pdf_file)
@@ -224,7 +268,17 @@ def choose_tesseract():
         pytesseract.pytesseract.tesseract_cmd = USER_TESSERACT_PATH
     else:
         print("TESSERACT NOT FOUND - SET IT MANUALLY !!!!")
-    
+        
+def enable_jpeg_conversion():
+    global chkJPEG
+    global input_ratioJPEG
+    if chkJPEG.isChecked():
+        input_ratioJPEG.setReadOnly(False)
+        input_ratioJPEG.setDisabled(False)
+    else:
+        input_ratioJPEG.setReadOnly(True)
+        input_ratioJPEG.setDisabled(True)
+        
 def start():
     global app
     global window
@@ -232,10 +286,14 @@ def start():
     global TESSERACT_PATH
     global USER_TESSERACT_PATH
     global PIXEL_PER_CM
+    global JPEG_RATIO
+    global USER_JPEG_RATIO
     global console
     global input_height
     global input_tesseract
-
+    global chkJPEG
+    global input_ratioJPEG
+    
     
     try:
         config = configparser.ConfigParser()
@@ -245,6 +303,9 @@ def start():
         PIXEL_PER_CM=config["OUTPUT"]["pixel_per_cm"]
         
         USER_TESSERACT_PATH=TESSERACT_PATH.replace("\\","/").replace("'","").replace('"','').strip()
+        
+        JPEG_RATIO=config["OUTPUT"]["default_jpeg_ratio"]
+        USER_JPEG_RATIO=JPEG_RATIO
         if os.path.isfile(USER_TESSERACT_PATH):
             pytesseract.pytesseract.tesseract_cmd = USER_TESSERACT_PATH
             print("TESSERACT ON "+ USER_TESSERACT_PATH)
@@ -289,6 +350,24 @@ def start():
         but_change_tesseract=QPushButton('Change tesseract')
         layout.addWidget(but_change_tesseract)
         but_change_tesseract.clicked.connect(choose_tesseract)
+        
+        
+        chkJPEG = QCheckBox("Convert to JPG before creating PDF")
+        layout.addWidget(chkJPEG)
+        chkJPEG.clicked.connect(enable_jpeg_conversion)
+        chkJPEG.setChecked(True)
+        
+        lab_ratioJPEG=QLabel()
+        lab_ratioJPEG.setText("Ratio jpeg")
+        layout.addWidget(lab_ratioJPEG)
+        
+        
+        
+        input_ratioJPEG=QLineEdit()
+        input_ratioJPEG.setText(USER_JPEG_RATIO)
+        layout.addWidget(input_ratioJPEG)
+        #input_ratioJPEG.setReadOnly(True)
+        #input_ratioJPEG.setDisabled(True)
         
         but_launch=QPushButton('Launch OCR')
         layout.addWidget(but_launch)

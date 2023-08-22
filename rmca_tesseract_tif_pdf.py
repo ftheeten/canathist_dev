@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout , QFileDialog, QButtonGroup, QRadioButton, QLineEdit, QLabel, QCheckBox, QMessageBox
+from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout , QFileDialog, QButtonGroup, QRadioButton, QLineEdit, QLabel, QCheckBox, QMessageBox, QComboBox, QSizePolicy
 from PySide6.QtCore import Qt
 import os
 import io
@@ -27,13 +27,27 @@ from datetime import datetime
 
 app=None
 window=None
+layout=None
 console=None
 filenames=[]
+folders=[]
+folders_output=[]
+lab_tesseract=None
+lab_height=None
+lab_opacity=None
+
+
+
+
 output_pdf_file=None
 input_height=None
 input_tesseract=None
 chkJPEG=None
 input_ratioJPEG=None
+input_opacity=None
+combobox_mode= None
+but_change_tesseract= None
+but_tif=None
 
 CONFIG_FILE="config.cfg"
 TESSERACT_PATH=""
@@ -45,7 +59,38 @@ USER_HEIGHT_IMAGE_PX=""
 PIXEL_PER_CM=""
 JPEG_RATIO=""
 USER_JPEG_RATIO=""
+FONT_TO_PIXEL_RATIO=0.75
 
+chkAdmin=None
+MODE_ADMIN=False
+MODE_FOLDER=False
+
+OPACITY=0.0
+USER_OPACITY=0.0
+
+
+class CustomFileDialog(QFileDialog):
+    def __init__(self, *args):
+        QFileDialog.__init__(self, *args)
+        #self.setOption(self.DontUseNativeDialog, True)
+        self.setFileMode(self.ExistingFiles)
+        btns = self.findChildren(QtGui.QPushButton)
+        self.openBtn = [x for x in btns if 'open' in str(x.text()).lower()][0]
+        self.openBtn.clicked.disconnect()
+        self.openBtn.clicked.connect(self.openClicked)
+        self.tree = self.findChild(QtGui.QTreeView)
+
+    def openClicked(self):
+        inds = self.tree.selectionModel().selectedIndexes()
+        files = []
+        for i in inds:
+            if i.column() == 0:
+                files.append(os.path.join(str(self.directory().absolutePath()),str(i.data().toString())))
+        self.selectedFiles = files
+        self.hide()
+
+    def filesSelected(self):
+        return self.selectedFiles
 
 
 def display_time():
@@ -63,8 +108,9 @@ def resize_image_target_height( image):
     return current_height_ratio
     
 
-def ocr_extract(p_input_file):
+def ocr_extract(p_input_file, opacity):
     global console
+    global FONT_TO_PIXEL_RATIO
     try:
         print("loading file...")
         display_time()
@@ -74,7 +120,7 @@ def ocr_extract(p_input_file):
         output = PdfWriter()
         print("file loaded")
         display_time()
-        color_transparent = Color( 0, 0, 0, alpha=0.0)
+        color_transparent = Color( 0, 0, 0, alpha=opacity)
         for (i,page) in enumerate(pdf_file) :            
             try:
                 if (i+1)%10==0:
@@ -91,16 +137,21 @@ def ocr_extract(p_input_file):
                 page_arr = np.asarray(page)
                 can = canvas.Canvas(packet)
                 can.setFillColor(color_transparent)
-                can.setFont("Courier", 6)
+                
                 can.setPageSize((math.floor(pdf_width), math.floor(pdf_height)))
                 ratio_width=float(page_arr.shape[1]/pdf_width)
                 ratio_height=float(page_arr.shape[0]/pdf_height)
                 page_arr_gray = cv2.cvtColor(page_arr,cv2.COLOR_BGR2GRAY)
+                
                 data = pytesseract.image_to_data(page_arr_gray, output_type='dict', config='-c preserve_interword_spaces=1')                
                 j=0
+                print(data.keys())
                 for text in data["text"]:
                     if len(text)>0:
-                        can.drawString( (data['left'][j])/ratio_width, math.floor(pdf_height)-(data['top'][j]/ratio_height),text)
+                        font_size=data['height'][j]/ratio_height*FONT_TO_PIXEL_RATIO
+                        print(font_size)
+                        can.setFont("Courier", font_size)
+                        can.drawString( (data['left'][j])/ratio_width, math.floor(pdf_height)-(data['top'][j]/ratio_height)-(data['height'][j]/ratio_height),text)
                     j=j+1
                 can.save()
                 packet.seek(0)
@@ -126,6 +177,7 @@ def ocr_extract(p_input_file):
     except Exception as e1:
         s = str(e1)
         print("\r\nError: "+s)
+        QMessageBox.about(window, 'Error',s)
  
 def generate_pdf(p_input_files, p_output_file, convert_to_jpeg):
     global USER_JPEG_RATIO
@@ -158,6 +210,7 @@ def generate_pdf(p_input_files, p_output_file, convert_to_jpeg):
                     #print(i)
                     image_ori = cv2.imread(image_path)
                     tmp_jpg=image_path+"_tmp_ocr.jpg"
+                    #print("COMPRESSING JPEG TO "+str(int_USER_JPEG_RATIO))
                     cv2.imwrite(tmp_jpg, image_ori, [int(cv2.IMWRITE_JPEG_QUALITY), int_USER_JPEG_RATIO])
                         
                     if (i+1)%10==0:
@@ -202,30 +255,56 @@ def lauch_ocr(p_file):
 def choose_tifs(x):
     global window
     global filenames
+    global folders
+    global combobox_mode
+    global MODE_FOLDER
     console.setText("Tiffs")
-    file_name = QFileDialog()
-    filter = "TIFF (*.TIF);;tiff (*.tif);;TIFF (*.TIFF);;tiff (*.tiff)"
-    filenames, _ = file_name.getOpenFileNames(window, "Open files", "", filter)
+    print(combobox_mode.currentIndex())
+    if not MODE_FOLDER:
+        file_name = QFileDialog()
+        filter = "TIFF (*.TIF);;tiff (*.tif);;TIFF (*.TIFF);;tiff (*.tiff)"
+        filenames, _ = file_name.getOpenFileNames(window, "Open files", "", filter)
+    else:
+        file= QFileDialog.getExistingDirectory(window, "Choose folder to add")
+        folders.append(file)
+        print("loaded folders")
+        print(folders)
     
 def choose_output():
     global window
     global output_pdf_file
     global console
     global filenames
-    folder_object = QFileDialog()
-    if len(filenames)>0:
-        output_pdf_file =folder_object.getSaveFileName(window, dir=os.path.dirname(filenames[0])+".pdf",  caption='Select a data file', filter='PDF File (*.pdf)')[0]
+    global folders
+    global folders_output
+    global MODE_FOLDER
+    
+    if not MODE_FOLDER:
+        folder_object = QFileDialog()
+        if len(filenames)>0:
+            output_pdf_file =folder_object.getSaveFileName(window, dir=os.path.dirname(filenames[0])+".pdf",  caption='Select a data file', filter='PDF File (*.pdf)')[0]
+        else:
+            output_pdf_file =folder_object.getSaveFileName(window, caption='Select a data file', filter='PDF File (*.pdf)')[0]
+        console.setText(console.text()+"\r\nOutput file: "+output_pdf_file)
     else:
-        output_pdf_file =folder_object.getSaveFileName(window, caption='Select a data file', filter='PDF File (*.pdf)')[0]
-    console.setText(console.text()+"\r\nOutput file: "+output_pdf_file)
-
+        folders_output=[]
+        folders = list(folders)
+        for pdf_folder in folders:
+            folder_object = QFileDialog()
+            QMessageBox.about(window, 'Select output','Select output PDF for '+str(pdf_folder))
+            output_pdf_file =folder_object.getSaveFileName(window, dir=pdf_folder+".pdf",  caption='Select a data file', filter='PDF File (*.pdf)')[0]
+            folders_output.append(output_pdf_file)
+            
 def launch_ocr():
     global window
     global filenames
+    global folders
+    global folders_output
     global output_pdf_file
     global console
     global input_height
     global input_tesseract
+    global input_opacity
     global chkJPEG
     global USER_HEIGHT_IMAGE_CM
     global USER_HEIGHT_IMAGE_PX
@@ -234,23 +313,60 @@ def launch_ocr():
     global JPEG_RATIO
     global USER_JPEG_RATIO
 
-    
-    if output_pdf_file is None or filenames is None:
-        console.setText(console.text()+"\r\nPDF files and/or Output folder not set")
-        print("PDF files and/or Output folder not set")
-    else:
-        i=0
-        USER_HEIGHT_IMAGE_CM=float(input_height.text())
-        USER_HEIGHT_IMAGE_PX=USER_HEIGHT_IMAGE_CM*float(PIXEL_PER_CM)
-        
-        print("user height "+str(USER_HEIGHT_IMAGE_CM)+"cm")
-        print("user height "+str(USER_HEIGHT_IMAGE_PX)+"pixels")
-        temp=output_pdf_file
-        generate_pdf(filenames, temp, chkJPEG)
-        ocr_extract(temp)        
+    global MODE_FOLDER
 
-        print("DONE FOR "+output_pdf_file)
-        display_time()
+    if not MODE_FOLDER:
+        if output_pdf_file is None or filenames is None:
+            console.setText(console.text()+"\r\nPDF files and/or Output folder not set")
+            print("PDF files and/or Output folder not set")
+        else:
+            i=0
+            USER_HEIGHT_IMAGE_CM=float(input_height.text())
+            USER_HEIGHT_IMAGE_PX=USER_HEIGHT_IMAGE_CM*float(PIXEL_PER_CM)
+            
+            USER_OPACITY=float(OPACITY)
+            try:
+                USER_OPACITY=float(USER_JPEG_RATIO)
+            except Exception:
+                QMessageBox.about(window, 'Error','Opacity can only be a number')
+                return
+            #print("user height "+str(USER_HEIGHT_IMAGE_CM)+"cm")
+            #print("user height "+str(USER_HEIGHT_IMAGE_PX)+"pixels")
+            temp=output_pdf_file
+            generate_pdf(filenames, temp, chkJPEG)
+            ocr_extract(temp, USER_OPACITY)        
+
+            print("DONE FOR "+output_pdf_file)
+            display_time()
+    else:
+        if len(folders)==len(folders_output):
+            i=0
+            for src_folder in folders:
+                output_pdf_file=folders_output[i]
+                filenames = [src_folder+"/"+f for f in os.listdir(src_folder) if f.lower().endswith('.tif') or  f.lower().endswith('.tiff')]
+                
+                print("PROCESSING "+str(src_folder)+"\tfolder "+str(i+1)+"/"+str(len(folders)))
+                USER_HEIGHT_IMAGE_CM=float(input_height.text())
+                USER_HEIGHT_IMAGE_PX=USER_HEIGHT_IMAGE_CM*float(PIXEL_PER_CM)
+                
+                USER_OPACITY=float(OPACITY)
+                try:
+                    USER_OPACITY=float(USER_JPEG_RATIO)
+                except Exception:
+                    QMessageBox.about(window, 'Error','Opacity can only be a number')
+                    return
+                #print("user height "+str(USER_HEIGHT_IMAGE_CM)+"cm")
+                #print("user height "+str(USER_HEIGHT_IMAGE_PX)+"pixels")
+                temp=output_pdf_file
+                #print(filenames)
+                generate_pdf(filenames, temp, chkJPEG)
+                ocr_extract(temp, USER_OPACITY)
+                print("DONE FOR "+output_pdf_file)
+                display_time()                
+                i=i+1
+        else:
+            QMessageBox.about(window, 'Error','Different length for folder input and output files')
+        
     print("PENDING (Ready)")
     
 def choose_tesseract():
@@ -278,24 +394,96 @@ def enable_jpeg_conversion():
     else:
         input_ratioJPEG.setReadOnly(True)
         input_ratioJPEG.setDisabled(True)
-        
+
+def tiff_mode_changed(index):
+    global MODE_FOLDER
+    global folders
+    global filenames
+    filenames=[]
+    folders=[]
+    if index==0:
+        but_tif.setText("Choose source Tifs")
+        MODE_FOLDER=False
+    elif index==1:
+        but_tif.setText("Add folder")
+        MODE_FOLDER=True
+    
+def switch_admin_mode(mode):
+    global MODE_ADMIN
+    global MODE_FOLDER
+    global window
+    global lab_tesseract
+    global input_tesseract
+    global lab_ratioJPEG
+    global lab_height
+    global lab_opacity
+    global input_height
+    global input_ratioJPEG
+    global input_opacity
+    global but_change_tesseract
+    
+    global SIZE_W
+    global ADMIN_SIZE_W
+    MODE_ADMIN=mode
+    MODE_FOLDER=False
+   
+    lab_tesseract.setVisible(MODE_ADMIN)
+    input_tesseract.setVisible(MODE_ADMIN)
+    lab_ratioJPEG.setVisible(MODE_ADMIN)
+    lab_height.setVisible(MODE_ADMIN)
+    lab_opacity.setVisible(MODE_ADMIN)
+    input_height.setVisible(MODE_ADMIN)
+    input_ratioJPEG.setVisible(MODE_ADMIN)
+    input_opacity.setVisible(MODE_ADMIN)
+    but_change_tesseract.setVisible(MODE_ADMIN)
+    
+    window.setFixedSize(window.sizeHint())
+    window.setMinimumWidth(700)
+    
+def switch_admin():
+    global chkAdmin
+    global window
+    switch_admin_mode(chkAdmin.isChecked())
+    
+    
 def start():
     global app
     global window
+    global layout
+    global MODE_ADMIN
+    global SIZE_W
     global CONFIG_FILE
     global TESSERACT_PATH
     global USER_TESSERACT_PATH
     global PIXEL_PER_CM
     global JPEG_RATIO
     global USER_JPEG_RATIO
+    global OLD_SIZE_W
     global console
+    
+    global lab_tesseract
+    global lab_ratioJPEG
+    global lab_opacity
+    global lab_height
+    
+    global but_tif
+    
     global input_height
     global input_tesseract
     global chkJPEG
+    global chkAdmin
     global input_ratioJPEG
+    global OPACITY
+    global USER_OPACITY
+    global input_opacity
+    global combobox_mode
+    
+    global but_change_tesseract
+    
     
     
     try:
+        MODE_ADMIN=False
         config = configparser.ConfigParser()
         config.read(CONFIG_FILE)
         TESSERACT_PATH=config["SYSTEM"]["tesseract_path"]
@@ -306,6 +494,9 @@ def start():
         
         JPEG_RATIO=config["OUTPUT"]["default_jpeg_ratio"]
         USER_JPEG_RATIO=JPEG_RATIO
+        
+        OPACITY=config["OUTPUT"]["text_opacity"]
+        USER_OPACITY=OPACITY
         if os.path.isfile(USER_TESSERACT_PATH):
             pytesseract.pytesseract.tesseract_cmd = USER_TESSERACT_PATH
             print("TESSERACT ON "+ USER_TESSERACT_PATH)
@@ -317,15 +508,31 @@ def start():
         
         layout = QVBoxLayout()
         
+        chkAdmin = QCheckBox("Admin mode")
+        layout.addWidget(chkAdmin)
+        chkAdmin.clicked.connect(switch_admin)
+        
         lab_tesseract=QLabel()
-        lab_tesseract.setText("Tesseract path")
+        lab_tesseract.setText("Tesseract path :")
+        
         layout.addWidget(lab_tesseract)
+        
         
         input_tesseract=QLabel()
         input_tesseract.setText(TESSERACT_PATH)
+
         layout.addWidget(input_tesseract)
         
         
+        lab_mode=QLabel()
+        lab_mode.setText("Select TIFF files or folders  :")
+        layout.addWidget(lab_mode)
+        
+        combobox_mode = QComboBox()
+        combobox_mode.addItems(['files_to_pdf', 'folder_to_pdf'])
+        layout.addWidget(combobox_mode)
+        combobox_mode.currentIndexChanged.connect(tiff_mode_changed)
+
         
         but_tif=QPushButton('Choose source Tifs')
         layout.addWidget(but_tif)
@@ -340,32 +547,44 @@ def start():
         window.show()    
         
         lab_height=QLabel()
-        lab_height.setText("Height page (cm)")
+        lab_height.setText("Height page (cm) :")
         layout.addWidget(lab_height)
+
         
         input_height=QLineEdit()
         input_height.setText(HEIGHT_IMAGE_CM)
         layout.addWidget(input_height)
+
         
         but_change_tesseract=QPushButton('Change tesseract')
         layout.addWidget(but_change_tesseract)
         but_change_tesseract.clicked.connect(choose_tesseract)
+
         
+        lab_opacity=QLabel()
+        lab_opacity.setText("Text Opacity :")
+        layout.addWidget(lab_opacity)
+
         
+        input_opacity=QLineEdit()
+        input_opacity.setText(OPACITY)
+        layout.addWidget(input_opacity)
+
         chkJPEG = QCheckBox("Convert to JPG before creating PDF")
         layout.addWidget(chkJPEG)
         chkJPEG.clicked.connect(enable_jpeg_conversion)
         chkJPEG.setChecked(True)
         
         lab_ratioJPEG=QLabel()
-        lab_ratioJPEG.setText("Ratio jpeg")
+        lab_ratioJPEG.setText("Ratio jpeg :")
         layout.addWidget(lab_ratioJPEG)
-        
+
         
         
         input_ratioJPEG=QLineEdit()
         input_ratioJPEG.setText(USER_JPEG_RATIO)
         layout.addWidget(input_ratioJPEG)
+
         #input_ratioJPEG.setReadOnly(True)
         #input_ratioJPEG.setDisabled(True)
         
@@ -378,7 +597,21 @@ def start():
         console=QLabel()
         console.setText("Output")
         layout.addWidget(console)
+        
+        #switch_admin_mode(MODE_ADMIN)
+        if MODE_ADMIN is False:
+            lab_tesseract.setVisible(MODE_ADMIN)
+            input_tesseract.setVisible(MODE_ADMIN)
+            lab_ratioJPEG.setVisible(MODE_ADMIN)
+            lab_height.setVisible(MODE_ADMIN)
+            lab_opacity.setVisible(MODE_ADMIN)
+            input_height.setVisible(MODE_ADMIN)
+            input_ratioJPEG.setVisible(MODE_ADMIN)
+            input_opacity.setVisible(MODE_ADMIN)
+            but_change_tesseract.setVisible(MODE_ADMIN)
         app.exec()
+        switch_admin_mode(MODE_ADMIN)
+        
     except:    
         traceback.print_exception(*sys.exc_info())
 if __name__ == '__main__':

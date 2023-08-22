@@ -145,11 +145,11 @@ def ocr_extract(p_input_file, opacity):
                 
                 data = pytesseract.image_to_data(page_arr_gray, output_type='dict', config='-c preserve_interword_spaces=1')                
                 j=0
-                print(data.keys())
+                
                 for text in data["text"]:
                     if len(text)>0:
                         font_size=data['height'][j]/ratio_height*FONT_TO_PIXEL_RATIO
-                        print(font_size)
+                        
                         can.setFont("Courier", font_size)
                         can.drawString( (data['left'][j])/ratio_width, math.floor(pdf_height)-(data['top'][j]/ratio_height)-(data['height'][j]/ratio_height),text)
                     j=j+1
@@ -316,23 +316,23 @@ def launch_ocr():
     global USER_JPEG_RATIO
 
     global MODE_FOLDER
-
+    USER_HEIGHT_IMAGE_CM=float(input_height.text())
+    USER_HEIGHT_IMAGE_PX=USER_HEIGHT_IMAGE_CM*float(PIXEL_PER_CM)
+            
+    USER_OPACITY=float(OPACITY)
+    try:
+        USER_OPACITY=float(input_opacity.text())
+    except Exception:
+        QMessageBox.about(window, 'Error','Opacity can only be a number')
+        return
+    #QMessageBox.about(window, 'OPACITY',str(USER_OPACITY))
     if not MODE_FOLDER:
         if output_pdf_file is None or filenames is None:
             console.setText(console.text()+"\r\nPDF files and/or Output folder not set")
             QMessageBox.about(window, 'Error','PDF files and/or Output folder not set')
             print("PDF files and/or Output folder not set")
         else:
-            i=0
-            USER_HEIGHT_IMAGE_CM=float(input_height.text())
-            USER_HEIGHT_IMAGE_PX=USER_HEIGHT_IMAGE_CM*float(PIXEL_PER_CM)
-            
-            USER_OPACITY=float(OPACITY)
-            try:
-                USER_OPACITY=float(input_opacity.text())
-            except Exception:
-                QMessageBox.about(window, 'Error','Opacity can only be a number')
-                return
+            i=0           
             #print("user height "+str(USER_HEIGHT_IMAGE_CM)+"cm")
             #print("user height "+str(USER_HEIGHT_IMAGE_PX)+"pixels")
             temp=output_pdf_file
@@ -353,17 +353,7 @@ def launch_ocr():
                 filenames = [src_folder+"/"+f for f in os.listdir(src_folder) if f.lower().endswith('.tif') or  f.lower().endswith('.tiff')]
                 
                 print("PROCESSING "+str(src_folder)+"\tfolder "+str(i+1)+"/"+str(len(folders)))
-                USER_HEIGHT_IMAGE_CM=float(input_height.text())
-                USER_HEIGHT_IMAGE_PX=USER_HEIGHT_IMAGE_CM*float(PIXEL_PER_CM)
                 
-                USER_OPACITY=float(OPACITY)
-                try:
-                    USER_OPACITY=float(USER_JPEG_RATIO)
-                except Exception:
-                    QMessageBox.about(window, 'Error','Opacity can only be a number')
-                    return
-                #print("user height "+str(USER_HEIGHT_IMAGE_CM)+"cm")
-                #print("user height "+str(USER_HEIGHT_IMAGE_PX)+"pixels")
                 temp=output_pdf_file
                 print(filenames)
                 generate_pdf(filenames, temp, chkJPEG)

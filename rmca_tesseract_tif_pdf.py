@@ -266,9 +266,9 @@ def choose_tifs(x):
         filenames, _ = file_name.getOpenFileNames(window, "Open files", "", filter)
     else:
         file= QFileDialog.getExistingDirectory(window, "Choose folder to add")
-        folders.append(file)
-        print("loaded folders")
-        print(folders)
+        if len(file)>0:
+            folders.append(file)
+        
     
 def choose_output():
     global window
@@ -293,7 +293,9 @@ def choose_output():
             folder_object = QFileDialog()
             QMessageBox.about(window, 'Select output','Select output PDF for '+str(pdf_folder))
             output_pdf_file =folder_object.getSaveFileName(window, dir=pdf_folder+".pdf",  caption='Select a data file', filter='PDF File (*.pdf)')[0]
-            folders_output.append(output_pdf_file)
+            
+            if len(output_pdf_file)>0:
+                folders_output.append(output_pdf_file)
             
 def launch_ocr():
     global window
@@ -318,6 +320,7 @@ def launch_ocr():
     if not MODE_FOLDER:
         if output_pdf_file is None or filenames is None:
             console.setText(console.text()+"\r\nPDF files and/or Output folder not set")
+            QMessageBox.about(window, 'Error','PDF files and/or Output folder not set')
             print("PDF files and/or Output folder not set")
         else:
             i=0
@@ -326,7 +329,7 @@ def launch_ocr():
             
             USER_OPACITY=float(OPACITY)
             try:
-                USER_OPACITY=float(USER_JPEG_RATIO)
+                USER_OPACITY=float(input_opacity.text())
             except Exception:
                 QMessageBox.about(window, 'Error','Opacity can only be a number')
                 return
@@ -339,7 +342,11 @@ def launch_ocr():
             print("DONE FOR "+output_pdf_file)
             display_time()
     else:
-        if len(folders)==len(folders_output):
+        if len(folders)==0 or len(folders_output)==0 :
+            console.setText(console.text()+"\r\nPDF files and/or Output folder not set")
+            QMessageBox.about(window, 'Error','PDF files and/or Output folder not set')
+            print("PDF files and/or Output folder not set")
+        elif len(folders)==len(folders_output):
             i=0
             for src_folder in folders:
                 output_pdf_file=folders_output[i]
@@ -358,7 +365,7 @@ def launch_ocr():
                 #print("user height "+str(USER_HEIGHT_IMAGE_CM)+"cm")
                 #print("user height "+str(USER_HEIGHT_IMAGE_PX)+"pixels")
                 temp=output_pdf_file
-                #print(filenames)
+                print(filenames)
                 generate_pdf(filenames, temp, chkJPEG)
                 ocr_extract(temp, USER_OPACITY)
                 print("DONE FOR "+output_pdf_file)
@@ -425,7 +432,7 @@ def switch_admin_mode(mode):
     global SIZE_W
     global ADMIN_SIZE_W
     MODE_ADMIN=mode
-    MODE_FOLDER=False
+    
    
     lab_tesseract.setVisible(MODE_ADMIN)
     input_tesseract.setVisible(MODE_ADMIN)
@@ -484,6 +491,7 @@ def start():
     
     try:
         MODE_ADMIN=False
+        MODE_FOLDER=False
         config = configparser.ConfigParser()
         config.read(CONFIG_FILE)
         TESSERACT_PATH=config["SYSTEM"]["tesseract_path"]

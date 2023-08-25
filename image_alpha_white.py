@@ -45,6 +45,24 @@ h_max=None
 s_max=None
 v_max=None
 
+lower_white=[0,0,216]
+upper_white=[141,111,255]
+
+def reinit_hsv():
+    global ratio
+    global image
+    global display
+    global filename
+    display=None
+    print("reinit")
+    print(ratio)
+    display=None
+    cv2.destroyWindow("")
+    image=cv2.imread(filename)       
+    display=image.copy()
+    
+    display = cv2.resize(display, (0,0), fx=ratio, fy=ratio)
+    cv2.imshow("",display)
 
 def display_simple(ROI):
     global maxwidth
@@ -66,6 +84,8 @@ def display_simple(ROI):
         #print(maxheight)
         #print(display_width)
         #display = resize(ROI, (display_width, maxheight))
+        #ROI=cv2.cvtColor(ROI, cv2.COLOR_BGR2HSV)
+        #ROI=cv2.cvtColor(ROI, cv2.COLOR_HSV2BGR)
         display = cv2.resize(ROI, (0,0), fx=ratio, fy=ratio)        
         #PanZoomWindow(display,"test")
         cv2.imshow("",display)
@@ -95,27 +115,57 @@ def load_image(p_filename):
         
 def choose_tifs():
     global window
+    global filename
     file_c = QFileDialog()
     filter = "TIFF (*.TIF);;tiff (*.tif);;TIFF (*.TIFF);;tiff (*.tiff);;jpg (*.jpg);;jpg (*.JPG);;png (*.png);;png (*.PNG)"
     filename,_ = file_c.getOpenFileName(window, "Open files", "", filter)
     print(filename)
     load_image(filename)
   
-def resize_image(ROI, ratio):
+def resize_image(ROI, tmp):
     global input_zoom
     global display
-    ratio=ratio/100
+    global ratio
+    ratio=tmp/100
     display = cv2.resize(ROI, (0,0), fx=ratio, fy=ratio)
     cv2.imshow("",display)
     input_zoom.setText(str(ratio))    
   
-def slider_do_zoom():
+def slider_do_zoom(val):
     global zoom_slider
     global image
-    resize_image(image, zoom_slider.value()) 
+    
+    
+    resize_image(image, val) 
+    
+def hsv_job(p_lower_white, p_upper_white ):
+    global display
+    hsv = cv2.cvtColor(display, cv2.COLOR_BGR2HSV)
+
+    mask = cv2.inRange(hsv, p_lower_white, p_upper_white)
+        #mask = 255-mask
+    mask=cv2.bitwise_not(mask)
+    result = cv2.bitwise_and(display, display, mask=mask)
+        
+    # set those pixels to white
+    #result[black_pixels] = [255, 255, 255]
+        
+    #result = imgcopy.copy()
+    #result[mask==0] = (255, 255, 255)
+    black_pixels = np.where(
+            (result[:, :, 0] == 0) & 
+            (result[:, :, 1] == 0) & 
+            (result[:, :, 2] == 0)
+    )
+
+    # set those pixels to white
+    result[black_pixels] = [255, 255, 255]
+    print("---------")
+    print(result[0][0])
+    cv2.imshow("",result)
     
 def slider_do_hsv():
-    global display
+    
     global slider_h_min
     global slider_s_min
     global slider_v_min
@@ -138,8 +188,8 @@ def slider_do_hsv():
     global v_max
     
     if slider_h_min is not None:
+        
         h_min=slider_h_min.value()
-        print(h_min)
         s_min=slider_s_min.value()
         v_min=slider_v_min.value()
         
@@ -158,18 +208,21 @@ def slider_do_hsv():
         # Set minimum and maximum HSV values to display
         lower = np.array([h_min, s_min, v_min])
         upper = np.array([h_max, s_max, v_max])
-
+        hsv_job(lower, upper)
         # Convert to HSV format and color threshold
-        hsv = cv2.cvtColor(display, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv, lower, upper)
         
-        result = cv2.bitwise_and(display, display, mask=mask)
+    
+    
+def preset_white_hsv():
+    global lower_white
+    global upper_white
+    slider_h_min.setValue(lower_white[0])
+    slider_s_min.setValue(lower_white[1])
+    slider_v_min.setValue(lower_white[2])
         
-        cv2.imshow("",result)
-    
-    
-    
-    
+    slider_h_max.setValue(upper_white[0])
+    slider_s_max.setValue(upper_white[1])
+    slider_v_max.setValue(upper_white[2])
     
 def slider_hsv(p_layout, label_text, slider, input,  initial_value, max_level):
     tmp_label=QLabel(label_text)
@@ -188,6 +241,8 @@ def slider_hsv(p_layout, label_text, slider, input,  initial_value, max_level):
     slider.valueChanged.connect(slider_do_hsv)
     p_layout.addWidget(slider)
     
+
+
 def start():
     global app
     global window
@@ -267,8 +322,13 @@ def start():
         slider_v_max=QSlider(Qt.Horizontal)
         slider_hsv(layout, "V Max",slider_v_max, input_v_max, 255, 255)
         
+        but_whitepreset=QPushButton('White preset  :')
+        layout.addWidget(but_whitepreset)
+        but_whitepreset.clicked.connect(preset_white_hsv)
         
-        
+        but_reset=QPushButton('Reset HSV  :')
+        layout.addWidget(but_reset)
+        but_reset.clicked.connect(reinit_hsv)
         
         
         

@@ -25,6 +25,7 @@ from datetime import datetime
 
 
 
+
 app=None
 window=None
 layout=None
@@ -61,9 +62,52 @@ JPEG_RATIO=""
 USER_JPEG_RATIO=""
 FONT_TO_PIXEL_RATIO=0.75
 
+POPPLER_MODE=False
+
+POPPLER_PATH=None
+USER_POPPLER_PATH=None
+
 chkAdmin=None
 MODE_ADMIN=False
 MODE_FOLDER=False
+
+
+chkPoppler=None
+labPoppler=None
+but_change_poppler=None
+inputPoppler=None
+
+HSV_H_MIN=None
+HSV_S_MIN=None
+HSV_V_MIN=None
+HSV_H_MAX=None
+HSV_S_MAX=None
+HSV_V_MAX=None
+
+USR_HSV_H_MIN=None
+USR_HSV_S_MIN=None
+USR_HSV_V_MIN=None
+USR_HSV_H_MAX=None
+USR_HSV_S_MAX=None
+USR_HSV_V_MAX=None
+
+HSV_MODE=True
+chk_hsv=None
+label_hsv_h_min=None
+label_hsv_s_min=None
+label_hsv_v_min=None
+label_hsv_h_max=None
+label_hsv_s_max=None
+label_hsv_v_max=None
+
+
+input_hsv_h_min=None
+input_hsv_s_min=None
+input_hsv_v_min=None
+input_hsv_h_max=None
+input_hsv_s_max=None
+input_hsv_v_max=None
+
 
 OPACITY=0.0
 USER_OPACITY=0.0
@@ -111,11 +155,16 @@ def resize_image_target_height( image):
 def ocr_extract(p_input_file, opacity):
     global console
     global FONT_TO_PIXEL_RATIO
+    global POPPLER_MODE
+    global USER_POPPLER_PATH
     try:
         print("loading file...")
         display_time()
         #file=p_input_file
-        pdf_file = convert_from_path(p_input_file)
+        if POPPLER_MODE:
+            pdf_file = convert_from_path(p_input_file,poppler_path=USER_POPPLER_PATH)
+        else:
+            pdf_file = convert_from_path(p_input_file)
         output_file=p_input_file
         output = PdfWriter()
         print("file loaded")
@@ -178,8 +227,23 @@ def ocr_extract(p_input_file, opacity):
         s = str(e1)
         print("\r\nError: "+s)
         QMessageBox.about(window, 'Error',s)
- 
-def generate_pdf(p_input_files, p_output_file, convert_to_jpeg):
+        
+
+    
+def apply_hsv_correction(p_img,p_lower_white, p_upper_white):
+    hsv = cv2.cvtColor(p_img, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, p_lower_white, p_upper_white)
+    mask=cv2.bitwise_not(mask)
+    result = cv2.bitwise_and(p_img, p_img, mask=mask)
+    black_pixels = np.where(
+            (result[:, :, 0] == 0) & 
+            (result[:, :, 1] == 0) & 
+            (result[:, :, 2] == 0)
+    )
+    result[black_pixels] = [255, 255, 255]
+    return result
+    
+def generate_pdf(p_input_files, p_output_file, convert_to_jpeg, correct_background=False, hsv_background_filter=[] ):
     global USER_JPEG_RATIO
     global input_ratioJPEG
     global window
@@ -209,6 +273,10 @@ def generate_pdf(p_input_files, p_output_file, convert_to_jpeg):
                 if go_jpeg:
                     #print(i)
                     image_ori = cv2.imread(image_path)
+                    if correct_background:                        
+                        p_l_filter=(hsv_background_filter[0],hsv_background_filter[1],hsv_background_filter[2])
+                        p_h_filter=(hsv_background_filter[3],hsv_background_filter[4],hsv_background_filter[5])
+                        image_ori=apply_hsv_correction(image_ori, p_l_filter, p_h_filter )
                     tmp_jpg=image_path+"_tmp_ocr.jpg"
                     #print("COMPRESSING JPEG TO "+str(int_USER_JPEG_RATIO))
                     cv2.imwrite(tmp_jpg, image_ori, [int(cv2.IMWRITE_JPEG_QUALITY), int_USER_JPEG_RATIO])
@@ -220,7 +288,7 @@ def generate_pdf(p_input_files, p_output_file, convert_to_jpeg):
                     size_ratio=resize_image_target_height( image)
                     can.setPageSize((image.shape[1]*size_ratio,image.shape[0]*size_ratio))
                         
-                    page_arr_gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+                    
                         
                     can.drawImage(tmp_jpg, 0, 0, width=image.shape[1]*size_ratio, height=image.shape[0]*size_ratio)            
                     can.showPage()
@@ -231,10 +299,14 @@ def generate_pdf(p_input_files, p_output_file, convert_to_jpeg):
                     print("page (intermediate PDF) "+str(i+1)+"/"+str(len(p_input_files)))
                     display_time()
                 image =  cv2.imread(image_path)
+                if correct_background:
+                    p_l_filter=(hsv_background_filter[0],hsv_background_filter[1],hsv_background_filter[2])
+                    p_h_filter=(hsv_background_filter[3],hsv_background_filter[4],hsv_background_filter[5])
+                    image=apply_hsv_correction(image, p_l_filter, p_h_filter )
                 size_ratio=resize_image_target_height( image)
                 can.setPageSize((image.shape[1]*size_ratio,image.shape[0]*size_ratio))
                 
-                page_arr_gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+                
                 
                 can.drawImage(image_path, 0, 0, width=image.shape[1]*size_ratio, height=image.shape[0]*size_ratio)            
                 can.showPage()
@@ -247,10 +319,7 @@ def generate_pdf(p_input_files, p_output_file, convert_to_jpeg):
     
 
     
-def lauch_ocr(p_file):
-    global window
-    global console
-    console.setText("processing \r\n"+p_file)
+
 
 def choose_tifs(x):
     global window
@@ -262,7 +331,7 @@ def choose_tifs(x):
     print(combobox_mode.currentIndex())
     if not MODE_FOLDER:
         file_name = QFileDialog()
-        filter = "TIFF (*.TIF);;tiff (*.tif);;TIFF (*.TIFF);;tiff (*.tiff)"
+        filter = "TIFF (*.TIF);;tiff (*.tif);;TIFF (*.TIFF);;tiff (*.tiff);;JPG (*.jpg);;JPG (*.JPG);;PNG (*.PNG);;PNG (*.png)"
         filenames, _ = file_name.getOpenFileNames(window, "Open files", "", filter)
     else:
         file= QFileDialog.getExistingDirectory(window, "Choose folder to add")
@@ -314,17 +383,50 @@ def launch_ocr():
     global USER_TESSERACT_PATH
     global JPEG_RATIO
     global USER_JPEG_RATIO
+    
+    global USR_HSV_H_MIN
+    global USR_HSV_S_MIN
+    global USR_HSV_V_MIN
+    global USR_HSV_H_MAX
+    global USR_HSV_S_MAX
+    global USR_HSV_V_MAX
+    
+    global input_hsv_h_min
+    global input_hsv_s_min
+    global input_hsv_v_min
+    global input_hsv_h_max
+    global input_hsv_s_max
+    global input_hsv_v_max
+
 
     global MODE_FOLDER
+    global HSV_MODE
     USER_HEIGHT_IMAGE_CM=float(input_height.text())
     USER_HEIGHT_IMAGE_PX=USER_HEIGHT_IMAGE_CM*float(PIXEL_PER_CM)
+    
+    
+
             
     USER_OPACITY=float(OPACITY)
+    
+    
     try:
         USER_OPACITY=float(input_opacity.text())
     except Exception:
         QMessageBox.about(window, 'Error','Opacity can only be a number')
         return
+        
+    if HSV_MODE:
+        USR_HSV_H_MIN=int(input_hsv_h_min.text())
+        USR_HSV_S_MIN=int(input_hsv_s_min.text())
+        USR_HSV_V_MIN=int(input_hsv_v_min.text())
+        USR_HSV_H_MAX=int(input_hsv_h_max.text())
+        USR_HSV_S_MAX=int(input_hsv_s_max.text())
+        USR_HSV_V_MAX=int(input_hsv_v_max.text())
+        hsv_filter=[USR_HSV_H_MIN, USR_HSV_S_MIN, USR_HSV_V_MIN, USR_HSV_H_MAX, USR_HSV_S_MAX, USR_HSV_V_MAX]
+    else:
+        hsv_filter=[]
+        
     #QMessageBox.about(window, 'OPACITY',str(USER_OPACITY))
     if not MODE_FOLDER:
         if output_pdf_file is None or filenames is None:
@@ -336,7 +438,7 @@ def launch_ocr():
             #print("user height "+str(USER_HEIGHT_IMAGE_CM)+"cm")
             #print("user height "+str(USER_HEIGHT_IMAGE_PX)+"pixels")
             temp=output_pdf_file
-            generate_pdf(filenames, temp, chkJPEG)
+            generate_pdf(filenames, temp, chkJPEG, HSV_MODE, hsv_filter)
             ocr_extract(temp, USER_OPACITY)        
 
             print("DONE FOR "+output_pdf_file)
@@ -356,7 +458,7 @@ def launch_ocr():
                 
                 temp=output_pdf_file
                 print(filenames)
-                generate_pdf(filenames, temp, chkJPEG)
+                generate_pdf(filenames, temp, chkJPEG, HSV_MODE, hsv_filter)
                 ocr_extract(temp, USER_OPACITY)
                 print("DONE FOR "+output_pdf_file)
                 display_time()                
@@ -382,6 +484,18 @@ def choose_tesseract():
     else:
         print("TESSERACT NOT FOUND - SET IT MANUALLY !!!!")
         
+def choose_poppler():
+    global window
+    global USER_POPPLER_PATH
+    global inputPoppler
+    USER_POPPLER_PATH= QFileDialog.getExistingDirectory(window, "Choose Poppler folder")
+    print(USER_POPPLER_PATH)
+    if os.path.isdir(USER_POPPLER_PATH):       
+        print("POPPLER ON "+ USER_POPPLER_PATH)
+        inputPoppler.setText(USER_POPPLER_PATH)        
+    else:
+        print("POPPLER NOT FOUND - SET IT MANUALLY !!!!")
+        
 def enable_jpeg_conversion():
     global chkJPEG
     global input_ratioJPEG
@@ -391,7 +505,55 @@ def enable_jpeg_conversion():
     else:
         input_ratioJPEG.setReadOnly(True)
         input_ratioJPEG.setDisabled(True)
-
+        
+def hide_hsv_ctrl(flag):
+    global label_hsv_h_min
+    global input_hsv_h_min
+    global label_hsv_s_min
+    global input_hsv_s_min
+    global label_hsv_v_min
+    global input_hsv_v_min
+    global label_hsv_h_max
+    global input_hsv_h_max
+    global label_hsv_s_max
+    global input_hsv_s_max
+    global label_hsv_v_max
+    global input_hsv_v_max
+    
+    
+    label_hsv_h_min.setVisible(flag)
+    input_hsv_h_min.setVisible(flag)
+    label_hsv_s_min.setVisible(flag)
+    input_hsv_s_min.setVisible(flag)
+    label_hsv_v_min.setVisible(flag)
+    input_hsv_v_min.setVisible(flag)
+        
+    label_hsv_h_max.setVisible(flag)
+    input_hsv_h_max.setVisible(flag)
+    label_hsv_s_max.setVisible(flag)
+    input_hsv_s_max.setVisible(flag)
+    label_hsv_v_max.setVisible(flag)
+    input_hsv_v_max.setVisible(flag)
+    window.setFixedSize(window.sizeHint())
+    window.setMinimumWidth(700)
+        
+def enable_background_normalization():
+    global chk_hsv
+    global HSV_MODE
+    if chk_hsv.isChecked():
+        HSV_MODE=True
+    else:
+        HSV_MODE=False
+    hide_hsv_ctrl(HSV_MODE)
+    
+def enable_poppler():
+    global chkPoppler
+    global POPPLER_MODE
+    if chkPoppler.isChecked():
+        POPPLER_MODE=True
+    else:
+        POPPLER_MODE=False
+        
 def tiff_mode_changed(index):
     global MODE_FOLDER
     global folders
@@ -404,6 +566,7 @@ def tiff_mode_changed(index):
     elif index==1:
         but_tif.setText("Add folder")
         MODE_FOLDER=True
+    enable_background_normalization(MODE_FOLDER)
     
 def switch_admin_mode(mode):
     global MODE_ADMIN
@@ -418,6 +581,11 @@ def switch_admin_mode(mode):
     global input_ratioJPEG
     global input_opacity
     global but_change_tesseract
+    global chkPoppler
+    global inputPoppler
+    global butPoppler
+    global labPoppler
+    global but_change_poppler
     
     global SIZE_W
     global ADMIN_SIZE_W
@@ -433,6 +601,10 @@ def switch_admin_mode(mode):
     input_ratioJPEG.setVisible(MODE_ADMIN)
     input_opacity.setVisible(MODE_ADMIN)
     but_change_tesseract.setVisible(MODE_ADMIN)
+    chkPoppler.setVisible(MODE_ADMIN)
+    inputPoppler.setVisible(MODE_ADMIN)
+    labPoppler.setVisible(MODE_ADMIN)
+    but_change_poppler.setVisible(MODE_ADMIN)
     
     window.setFixedSize(window.sizeHint())
     window.setMinimumWidth(700)
@@ -456,6 +628,12 @@ def start():
     global JPEG_RATIO
     global USER_JPEG_RATIO
     global OLD_SIZE_W
+    
+    global POPPLER_MODE
+    global USER_POPPLER_MODE
+    global POPPLER_PATH
+    global USER_POPPLER_PATH
+    
     global console
     
     global lab_tesseract
@@ -469,14 +647,43 @@ def start():
     global input_tesseract
     global chkJPEG
     global chkAdmin
+    global chkPoppler
     global input_ratioJPEG
     global OPACITY
     global USER_OPACITY
     global input_opacity
     global combobox_mode
     
-    global but_change_tesseract
+    global labPoppler
+    global inputPoppler
     
+    
+    global but_change_tesseract
+    global but_change_poppler
+    
+    global chk_hsv
+    
+    global HSV_MODE
+    global HSV_H_MIN
+    global HSV_S_MIN
+    global HSV_V_MIN
+    global HSV_H_MAX
+    global HSV_S_MAX
+    global HSV_V_MAX
+
+    global label_hsv_h_min
+    global label_hsv_s_min
+    global label_hsv_v_min
+    global label_hsv_h_max
+    global label_hsv_s_max
+    global label_hsv_v_max
+    
+    global input_hsv_h_min
+    global input_hsv_s_min
+    global input_hsv_v_min
+    global input_hsv_h_max
+    global input_hsv_s_max
+    global input_hsv_v_max
     
     
     try:
@@ -487,6 +694,15 @@ def start():
         TESSERACT_PATH=config["SYSTEM"]["tesseract_path"]
         HEIGHT_IMAGE_CM=config["OUTPUT"]["height_image_cm"]
         PIXEL_PER_CM=config["OUTPUT"]["pixel_per_cm"]
+        
+        tmp_POPPLER=config["SYSTEM"]["poppler_mode"]
+        
+        POPPLER_PATH=config["SYSTEM"]["poppler_path"]
+        POPPLER_MODE=False
+        #if tmp_POPPLER.strip().lower()=="on":
+        #    POPPLER_MODE=True
+            
+        
         
         USER_TESSERACT_PATH=TESSERACT_PATH.replace("\\","/").replace("'","").replace('"','').strip()
         
@@ -500,6 +716,14 @@ def start():
             print("TESSERACT ON "+ USER_TESSERACT_PATH)
         else:
             print("TESSERACT NOT FOUND - SET IT MANUALLY !!!!")
+            
+        HSV_H_MIN=config["OUTPUT"]["hsv_h_min"]
+        HSV_S_MIN=config["OUTPUT"]["hsv_s_min"]
+        HSV_V_MIN=config["OUTPUT"]["hsv_v_min"]
+        HSV_H_MAX=config["OUTPUT"]["hsv_h_max"]
+        HSV_S_MAX=config["OUTPUT"]["hsv_s_max"]
+        HSV_V_MAX=config["OUTPUT"]["hsv_v_max"]
+        
         app = QApplication([])
         window = QWidget()
         window.setMinimumWidth(700)
@@ -521,6 +745,28 @@ def start():
 
         layout.addWidget(input_tesseract)
         
+        but_change_tesseract=QPushButton('Change tesseract')
+        layout.addWidget(but_change_tesseract)
+        but_change_tesseract.clicked.connect(choose_tesseract)
+
+        chkPoppler = QCheckBox("Set Poppler manually")
+        layout.addWidget(chkPoppler)
+        chkPoppler.clicked.connect(enable_poppler)
+        chkPoppler.setChecked(POPPLER_MODE)
+        
+        
+        
+        labPoppler=QLabel()
+        labPoppler.setText("Poppler path :")
+        layout.addWidget(labPoppler)
+        
+        inputPoppler=QLabel()
+        inputPoppler.setText(POPPLER_PATH)
+        layout.addWidget(inputPoppler)
+        
+        but_change_poppler=QPushButton('Change Poppler')
+        layout.addWidget(but_change_poppler)
+        but_change_poppler.clicked.connect(choose_poppler)
         
         lab_mode=QLabel()
         lab_mode.setText("Select TIFF files or folders  :")
@@ -554,10 +800,7 @@ def start():
         layout.addWidget(input_height)
 
         
-        but_change_tesseract=QPushButton('Change tesseract')
-        layout.addWidget(but_change_tesseract)
-        but_change_tesseract.clicked.connect(choose_tesseract)
-
+        
         
         lab_opacity=QLabel()
         lab_opacity.setText("Text Opacity :")
@@ -583,6 +826,56 @@ def start():
         input_ratioJPEG.setText(USER_JPEG_RATIO)
         layout.addWidget(input_ratioJPEG)
 
+        chk_hsv=QCheckBox("Normalize background")
+        layout.addWidget(chk_hsv)
+        chk_hsv.clicked.connect(enable_background_normalization)
+        chk_hsv.setChecked(HSV_MODE)
+        
+        label_hsv_h_min= QLabel("H Min")
+        layout.addWidget(label_hsv_h_min)
+        input_hsv_h_min=QLineEdit(str(HSV_H_MIN))
+        layout.addWidget(input_hsv_h_min)
+        
+        label_hsv_s_min= QLabel("S Min")
+        layout.addWidget(label_hsv_s_min)
+        input_hsv_s_min=QLineEdit(str(HSV_S_MIN))
+        layout.addWidget(input_hsv_s_min)
+        
+        label_hsv_v_min= QLabel("V Min")
+        layout.addWidget(label_hsv_v_min)
+        input_hsv_v_min=QLineEdit(str(HSV_V_MIN))
+        layout.addWidget(input_hsv_v_min)
+        
+        
+        label_hsv_h_max= QLabel("H Max")
+        layout.addWidget(label_hsv_h_max)
+        input_hsv_h_max=QLineEdit(str(HSV_H_MAX))
+        layout.addWidget(input_hsv_h_max)
+        
+        label_hsv_s_max= QLabel("S Max")
+        layout.addWidget(label_hsv_s_max)
+        input_hsv_s_max=QLineEdit(str(HSV_S_MAX))
+        layout.addWidget(input_hsv_s_max)
+        
+        label_hsv_v_max= QLabel("V Max")
+        layout.addWidget(label_hsv_v_max)
+        input_hsv_v_max=QLineEdit(str(HSV_V_MAX))
+        layout.addWidget(input_hsv_v_max)
+        
+        label_hsv_h_min.setVisible(False)
+        input_hsv_h_min.setVisible(False)
+        label_hsv_s_min.setVisible(False)
+        input_hsv_s_min.setVisible(False)
+        label_hsv_v_min.setVisible(False)
+        input_hsv_v_min.setVisible(False)
+        
+        label_hsv_h_max.setVisible(False)
+        input_hsv_h_max.setVisible(False)
+        label_hsv_s_max.setVisible(False)
+        input_hsv_s_max.setVisible(False)
+        label_hsv_v_max.setVisible(False)
+        input_hsv_v_max.setVisible(False)
+
         #input_ratioJPEG.setReadOnly(True)
         #input_ratioJPEG.setDisabled(True)
         
@@ -600,6 +893,9 @@ def start():
         if MODE_ADMIN is False:
             lab_tesseract.setVisible(MODE_ADMIN)
             input_tesseract.setVisible(MODE_ADMIN)
+            labPoppler.setVisible(MODE_ADMIN)
+            inputPoppler.setVisible(MODE_ADMIN)
+            
             lab_ratioJPEG.setVisible(MODE_ADMIN)
             lab_height.setVisible(MODE_ADMIN)
             lab_opacity.setVisible(MODE_ADMIN)
@@ -607,6 +903,10 @@ def start():
             input_ratioJPEG.setVisible(MODE_ADMIN)
             input_opacity.setVisible(MODE_ADMIN)
             but_change_tesseract.setVisible(MODE_ADMIN)
+            
+            chkPoppler.setVisible(MODE_ADMIN)
+            but_change_poppler.setVisible(MODE_ADMIN)
+            
         app.exec()
         switch_admin_mode(MODE_ADMIN)
         

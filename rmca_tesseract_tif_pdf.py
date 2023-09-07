@@ -327,17 +327,22 @@ def choose_tifs(x):
     global folders
     global combobox_mode
     global MODE_FOLDER
-    console.setText("Tiffs")
+    global console
+    tmp_text=console.text()
+    
     print(combobox_mode.currentIndex())
     if not MODE_FOLDER:
+        
         file_name = QFileDialog()
         filter = "TIFF (*.TIF);;tiff (*.tif);;TIFF (*.TIFF);;tiff (*.tiff);;JPG (*.jpg);;JPG (*.JPG);;PNG (*.PNG);;PNG (*.png)"
         filenames, _ = file_name.getOpenFileNames(window, "Open files", "", filter)
+        console.setText(tmp_text+"\nFILES\n"+"\n".join(filenames))
     else:
+        console.setText(tmp_text+"\nFOLDER")
         file= QFileDialog.getExistingDirectory(window, "Choose folder to add")
         if len(file)>0:
             folders.append(file)
-        
+        console.setText(tmp_text+"\nFILES\n"+"\n".join(folders))
     
 def choose_output():
     global window
@@ -463,6 +468,7 @@ def launch_ocr():
                 print("DONE FOR "+output_pdf_file)
                 display_time()                
                 i=i+1
+            folders=[]
         else:
             QMessageBox.about(window, 'Error','Different length for folder input and output files')
         

@@ -152,82 +152,7 @@ def resize_image_target_height( image):
     return current_height_ratio
     
 
-def ocr_extract(p_input_file, opacity):
-    global console
-    global FONT_TO_PIXEL_RATIO
-    global POPPLER_MODE
-    global USER_POPPLER_PATH
-    try:
-        print("loading file...")
-        display_time()
-        #file=p_input_file
-        if POPPLER_MODE:
-            pdf_file = convert_from_path(p_input_file,poppler_path=USER_POPPLER_PATH)
-        else:
-            pdf_file = convert_from_path(p_input_file)
-        output_file=p_input_file
-        output = PdfWriter()
-        print("file loaded")
-        display_time()
-        color_transparent = Color( 0, 0, 0, alpha=opacity)
-        for (i,page) in enumerate(pdf_file) :            
-            try:
-                if (i+1)%10==0:
-                    print("page "+str(i+1)+"/"+str(len(pdf_file)))
-                    display_time()
-                
-                existing_pdf = PdfReader(open(p_input_file, "rb"))
-                packet = io.BytesIO()
-                box = existing_pdf.pages[i].mediabox
-                min_pt = box.lower_left
-                max_pt = box.upper_right
-                pdf_width = max_pt[0] - min_pt[0]
-                pdf_height = max_pt[1] - min_pt[1]
-                page_arr = np.asarray(page)
-                can = canvas.Canvas(packet)
-                can.setFillColor(color_transparent)
-                
-                can.setPageSize((math.floor(pdf_width), math.floor(pdf_height)))
-                ratio_width=float(page_arr.shape[1]/pdf_width)
-                ratio_height=float(page_arr.shape[0]/pdf_height)
-                page_arr_gray = cv2.cvtColor(page_arr,cv2.COLOR_BGR2GRAY)
-                
-                data = pytesseract.image_to_data(page_arr_gray, output_type='dict', config='-c preserve_interword_spaces=1')                
-                j=0
-                
-                for text in data["text"]:
-                    if len(text)>0:
-                        font_size=data['height'][j]/ratio_height*FONT_TO_PIXEL_RATIO
-                        
-                        can.setFont("Courier", font_size)
-                        can.drawString( (data['left'][j])/ratio_width, math.floor(pdf_height)-(data['top'][j]/ratio_height)-(data['height'][j]/ratio_height),text)
-                    j=j+1
-                can.save()
-                packet.seek(0)
-                new_pdf = PdfReader(packet)
-                page_ori = existing_pdf.pages[i]
-                page_ori.merge_page(new_pdf.pages[0])
-                output.add_page(page_ori)        
-                existing_pdf=None
-                new_pdf=None
-                can=None
-                packet=None
-            except Exception as e2:
-                s = str(e2)
-                print("\r\nError: "+s)
-        output_stream = open(output_file, "wb")
-        output.write(output_stream)
-        output_stream.close()
-        
-        pdf_file=None
-        print("done (intermediate pdf conversion)")
-        print("Next step is OCR")
-        display_time()
-    except Exception as e1:
-        s = str(e1)
-        print("\r\nError: "+s)
-        QMessageBox.about(window, 'Error',s)
-        
+ 
 
     
 def apply_hsv_correction(p_img,p_lower_white, p_upper_white):
@@ -242,16 +167,30 @@ def apply_hsv_correction(p_img,p_lower_white, p_upper_white):
     )
     result[black_pixels] = [255, 255, 255]
     return result
+
+def ocr_logic(p_img):
+    page_arr_gray = cv2.cvtColor(p_img,cv2.COLOR_BGR2GRAY)
+    data = pytesseract.image_to_data(page_arr_gray, output_type='dict', config='-c preserve_interword_spaces=1')
+    return data
+
     
-def generate_pdf(p_input_files, p_output_file, convert_to_jpeg, correct_background=False, hsv_background_filter=[] ):
+def generate_pdf(p_input_files, p_output_file, opacity, convert_to_jpeg,  correct_background=False, hsv_background_filter=[] ):
     global USER_JPEG_RATIO
     global input_ratioJPEG
+    global FONT_TO_PIXEL_RATIO
     global window
     try:
         print("generating  temporary PDF")
         print("loading file...")
         display_time()
+        color_image = Color( 0, 0, 0, alpha=1.0)
+        color_transparent = Color( 0, 0, 0, alpha=opacity)
+        '''
         can = canvas.Canvas(p_output_file)
+        can.setFillColor(color_transparent)
+        '''
+        can = canvas.Canvas(p_output_file)
+        
         p_input_files.sort()
         print("nb pages="+str(len(p_input_files)))
         for i, image_path in enumerate(p_input_files):
@@ -271,47 +210,66 @@ def generate_pdf(p_input_files, p_output_file, convert_to_jpeg, correct_backgrou
                         go_jpeg=False
                         return
                 if go_jpeg:
-                    #print(i)
                     image_ori = cv2.imread(image_path)
+                    data=ocr_logic(image_ori)
                     if correct_background:                        
                         p_l_filter=(hsv_background_filter[0],hsv_background_filter[1],hsv_background_filter[2])
                         p_h_filter=(hsv_background_filter[3],hsv_background_filter[4],hsv_background_filter[5])
                         image_ori=apply_hsv_correction(image_ori, p_l_filter, p_h_filter )
-                    tmp_jpg=image_path+"_tmp_ocr.jpg"
-                    #print("COMPRESSING JPEG TO "+str(int_USER_JPEG_RATIO))
-                    cv2.imwrite(tmp_jpg, image_ori, [int(cv2.IMWRITE_JPEG_QUALITY), int_USER_JPEG_RATIO])
-                        
+                    is_success, buffer = cv2.imencode(".jpg", image_ori, [int(cv2.IMWRITE_JPEG_QUALITY), int_USER_JPEG_RATIO])
+                    pdf_tmp_buffer=ImageReader(io.BytesIO(buffer.tobytes()))     
+                    image= cv2.imdecode(buffer,cv2.IMREAD_COLOR)
+                    
+                    size_ratio=resize_image_target_height( image)                  
+                    can.setFillColor(color_image)
+                    can.setPageSize((image.shape[1]*size_ratio,image.shape[0]*size_ratio))                        
+                    new_width=image.shape[1]*size_ratio
+                    new_height=image.shape[0]*size_ratio                 
+                    can.drawImage(pdf_tmp_buffer, 0, 0, width=new_width, height=new_height)                   
+                    j=0
+                    can.setFillColor(color_transparent)
+                    for text in data["text"]:
+                        if len(text)>0:
+                            font_size=data['height'][j]*size_ratio*FONT_TO_PIXEL_RATIO                            
+                            str_y=(data['left'][j])*size_ratio
+                            str_x=math.floor(new_height)-(data['top'][j]*size_ratio)-(data['height'][j]*size_ratio)
+                            can.setFont("Courier", font_size)                            
+                            can.drawString( str_y, str_x ,text)                            
+                        j=j+1                    
+                    can.showPage()
                     if (i+1)%10==0:
                         print("page (intermediate PDF) "+str(i+1)+"/"+str(len(p_input_files)))
                         display_time()
-                    image =  cv2.imread(tmp_jpg)
-                    size_ratio=resize_image_target_height( image)
-                    can.setPageSize((image.shape[1]*size_ratio,image.shape[0]*size_ratio))
-                        
-                    
-                        
-                    can.drawImage(tmp_jpg, 0, 0, width=image.shape[1]*size_ratio, height=image.shape[0]*size_ratio)            
-                    can.showPage()
-                    os.remove(tmp_jpg)
-            else:
-                #print(i)
-                if (i+1)%10==0:
-                    print("page (intermediate PDF) "+str(i+1)+"/"+str(len(p_input_files)))
-                    display_time()
-                image =  cv2.imread(image_path)
-                if correct_background:
+            else:                
+                image_ori = cv2.imread(image_path)
+                data=ocr_logic(image_ori)
+                if correct_background:                        
                     p_l_filter=(hsv_background_filter[0],hsv_background_filter[1],hsv_background_filter[2])
                     p_h_filter=(hsv_background_filter[3],hsv_background_filter[4],hsv_background_filter[5])
-                    image=apply_hsv_correction(image, p_l_filter, p_h_filter )
-                size_ratio=resize_image_target_height( image)
-                can.setPageSize((image.shape[1]*size_ratio,image.shape[0]*size_ratio))
-                
-                
-                
-                can.drawImage(image_path, 0, 0, width=image.shape[1]*size_ratio, height=image.shape[0]*size_ratio)            
+                    image_ori=apply_hsv_correction(image_ori, p_l_filter, p_h_filter )
+                size_ratio=resize_image_target_height( image_ori)                  
+                can.setFillColor(color_image)
+                can.setPageSize((image_ori.shape[1]*size_ratio,image_ori.shape[0]*size_ratio))                        
+                new_width=image_ori.shape[1]*size_ratio
+                new_height=image_ori.shape[0]*size_ratio                 
+                can.drawImage(image_path, 0, 0, width=new_width, height=new_height)                   
+                j=0
+                can.setFillColor(color_transparent)
+                for text in data["text"]:
+                    if len(text)>0:
+                        font_size=data['height'][j]*size_ratio*FONT_TO_PIXEL_RATIO                            
+                        str_y=(data['left'][j])*size_ratio
+                        str_x=math.floor(new_height)-(data['top'][j]*size_ratio)-(data['height'][j]*size_ratio)
+                        can.setFont("Courier", font_size)                            
+                        can.drawString( str_y, str_x ,text)                            
+                    j=j+1                    
                 can.showPage()
+                if (i+1)%10==0:
+                    print("page (intermediate PDF) "+str(i+1)+"/"+str(len(p_input_files)))
+                    display_time()          
         can.save()
-        can=None
+        #can=None
+        #can=None
         print("Done")
         display_time()    
     except:    
@@ -443,8 +401,8 @@ def launch_ocr():
             #print("user height "+str(USER_HEIGHT_IMAGE_CM)+"cm")
             #print("user height "+str(USER_HEIGHT_IMAGE_PX)+"pixels")
             temp=output_pdf_file
-            generate_pdf(filenames, temp, chkJPEG, HSV_MODE, hsv_filter)
-            ocr_extract(temp, USER_OPACITY)        
+            generate_pdf(filenames, temp, USER_OPACITY, chkJPEG.isChecked(), HSV_MODE, hsv_filter)
+            #ocr_extract(temp, USER_OPACITY)        
 
             print("DONE FOR "+output_pdf_file)
             display_time()
@@ -463,8 +421,8 @@ def launch_ocr():
                 
                 temp=output_pdf_file
                 print(filenames)
-                generate_pdf(filenames, temp, chkJPEG, HSV_MODE, hsv_filter)
-                ocr_extract(temp, USER_OPACITY)
+                generate_pdf(filenames, temp,USER_OPACITY, chkJPEG.isChecked(), HSV_MODE, hsv_filter)
+                #ocr_extract(temp, USER_OPACITY)
                 print("DONE FOR "+output_pdf_file)
                 display_time()                
                 i=i+1

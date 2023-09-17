@@ -12,6 +12,11 @@ POPPLER_PATH="C:\\DEV\\CANATHIST\\tiff_to_ocr_pdf\\POPPLER\\Release-23.08.0-0\\p
 #import matplotlib.pyplot as plt
 import keras_ocr
 
+def get_contour_precedence(contour, cols):
+    tolerance_factor = 10
+    origin = cv2.boundingRect(contour)
+    return ((origin[1] // tolerance_factor) * tolerance_factor) * cols + origin[0]
+
 
 def midpoint(x1, y1, x2, y2):
     x_mid = int((x1 + x2)/2)
@@ -70,7 +75,7 @@ def extract_grid2(p_input_file):
 '''   
 
 def do_ocr(p_image):
-    data = pytesseract.image_to_data(p_image, output_type='dict', config='-c preserve_interword_spaces=1')
+    data = pytesseract.image_to_string(p_image, output_type='dict', config='-c preserve_interword_spaces=1')
     j=0
     '''
     for text in data["text"]:
@@ -142,15 +147,48 @@ def extract_grid(p_input_file, p_pipeline):
     print(tree_key)
     main_grid=max(tree_key, key=lambda x: len(tree_key[x]))
     print(tree_key[main_grid])
+    list_contour=[]
     for i in tree_key[main_grid]:
         contour=contours[i]
+        list_contour.append(contour)
         x,y,w,h = cv2.boundingRect(contour)
         cv2.rectangle(cpy, (x,y), (x+w,y+h), (0,255,0), 2)
         cv2.putText(cpy, str(i)+ ":"+str(hierarchy[i][2]), (x,y), cv2.FONT_HERSHEY_SIMPLEX, 0.3, 255)
+        
+    list_contour.sort(key=lambda x:get_contour_precedence(x, cpy.shape[1]))
+
+    # For debugging purposes.
+    last_x=0    
+    current_x=0
+    current_row=[]
+    current_grid=[]
+    current_column=0
     
+    for i in range(0, len(list_contour)):
+        cv2.putText(cpy, str(i), cv2.boundingRect(list_contour[i])[:2], cv2.FONT_HERSHEY_COMPLEX, 1, [125])
+        current_x,y,w,h = cv2.boundingRect(list_contour[i])
+        if current_x>last_x and i<len(list_contour)-1:
+            current_row.append(list_contour[i])
+            last_x=current_x
+        else:
+            print("END ROW "+str(i))
+            current_grid.append(current_row.copy())
+            last_x=0
+            current_row=[]
+            current_row.append(list_contour[i])
+            
+    for i in range(0, len(current_grid)):
+        row=current_grid[i]
+        for j in range(0, len(row)):
+            current_rect=row[j]
+            x,y,w,h = cv2.boundingRect(list_contour[j])
+            crop_img = cpy[y:y+h, x:x+w]
+            display_with_factor(crop_img, 1)
+            str_ocr = pytesseract.image_to_string(crop_img,  config='-c preserve_interword_spaces=1')
+            print("text for "+str(i)+" "+str(j)+" "+str_ocr)
     # Print the coordinates of the vertical lines
     #print(vertical_lines)
-    display_with_factor(cpy, 1)
+    display_with_factor(cpy, 0.25)
     
 def start_ocr(p_input_file,  p_tesseract_path,  p_poppler_mode, p_poppler_path, page_begin, page_end, p_pipeline):
     pytesseract.pytesseract.tesseract_cmd =   p_tesseract_path 

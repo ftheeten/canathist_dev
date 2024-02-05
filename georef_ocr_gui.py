@@ -20,13 +20,15 @@ import time
 from shapely.geometry import Polygon, Point
 import pandas
 
-os.environ["PROJ_LIB"]="C:\\OSGeo4W\\share\\proj"
+#os.environ["PROJ_LIB"]="C:\\OSGeo4W64\\share\\proj"
 
 class GeoRefOcrGUI(QApplication):
 
-    default_tile_w=500
-    default_tile_h=500
+    default_tile_w=1000
+    default_tile_h=1000
     default_ratio_overlap=0.75
+    default_proj_lib="C:\\Program Files\\QGIS 3.26.1\\share\\proj"
+
     pipeline=None
     window=None
     in_tiff=None
@@ -127,7 +129,9 @@ class GeoRefOcrGUI(QApplication):
         
     def tile(self, pipeline, fp, out_xls, tile_h, tile_w, offset_h, offset_w,  ratio_offset_2ndpass=0.75):
         df = pandas.DataFrame()
-        src = rioxarray.open_rasterio(fp, masked=True).rio.reproject("epsg:4326")
+        src = rioxarray.open_rasterio(fp, masked=True)
+        print(src.rio.crs)
+        src=src.rio.reproject("epsg:4326")
         src_cv2=cv2.imread(fp)
         geo_obj=XRasterBase(src)
         pipeline = keras_ocr.pipeline.Pipeline()
@@ -220,6 +224,8 @@ class GeoRefOcrGUI(QApplication):
         
     def process_input(self):
         if self.in_tiff is not None and self.out_excel is not None:
+            os.environ["PROJ_LIB"]=self.inputProj.text()
+            print(os.environ["PROJ_LIB"])
             self.tile_w=self.input_tile_w.value()
             self.tile_h=self.input_tile_h.value()
             self.ratio_overlap=self.input_overlap_ratio.value()
@@ -228,6 +234,13 @@ class GeoRefOcrGUI(QApplication):
     
     def init_gui(self):
         self.layout = QVBoxLayout()
+        
+        labelproj=QLabel("PROJ_LIB")
+        self.layout.addWidget(labelproj)
+        
+        self.inputProj=QLineEdit()
+        self.inputProj.setText(self.default_proj_lib)
+        self.layout.addWidget(self.inputProj)
         
         self.but_input_files= QPushButton('Input files')
         self.layout.addWidget(self.but_input_files)

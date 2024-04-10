@@ -19,16 +19,15 @@ import datetime
 import time
 from shapely.geometry import Polygon, Point
 import pandas
+import copy
 
-#os.environ["PROJ_LIB"]="C:\\OSGeo4W64\\share\\proj"
+os.environ["PROJ_LIB"]="C:\\OSGeo4W\\share\\proj"
 
 class GeoRefOcrGUI(QApplication):
 
-    default_tile_w=1000
-    default_tile_h=1000
+    default_tile_w=500
+    default_tile_h=500
     default_ratio_overlap=0.75
-    default_proj_lib="C:\\Program Files\\QGIS 3.26.1\\share\\proj"
-
     pipeline=None
     window=None
     in_tiff=None
@@ -38,7 +37,10 @@ class GeoRefOcrGUI(QApplication):
     tile_h=None
     ratio_overlap=None
     
-    i_result=0
+    #i_result=0
+    
+    RESULTS={}
+    I_RESULT=0
 
     
     
@@ -49,6 +51,157 @@ class GeoRefOcrGUI(QApplication):
         self.init_gui()
         self.window.show()
         self.exec()
+        
+        
+    def calculate_iou(self, box_1, box_2):
+        poly_1 = Polygon(box_1)
+        poly_2 = Polygon(box_2)
+        iou = poly_1.intersection(poly_2).area / poly_1.union(poly_2).area
+        return iou
+        
+    def handle_clusters(self,p_results, p_clusters):
+        results={}
+        for key, item in p_clusters.items():
+            if len(item)==1:
+                label=p_results[key]["label"]
+                print("label one "+str(label))
+                results[key]=p_results[key]
+            elif len(item)>1:
+                print("several")
+                results[key]=p_results[key]
+                strs=[]
+                for key2 in item:
+                    strs.append(p_results[key2]["label"])
+                strs.sort(key=lambda item: -len(item))
+                tmps=[]
+                for label in strs:
+                    print("label several "+str(label))
+                    contained=False
+                    for cmp in tmps:
+                        if label in cmp:
+                            contained=True
+                    if not contained:
+                        tmps.append(label)
+                results[key]["label"]="/".join(tmps)
+                print(results[key]["label"])
+        return results            
+
+    def merge_intersections(self,p_results, p_clusters):
+        merged={}
+        for key , item in p_results.items():
+            print("--------------------------->")
+            print(key)
+            clusts=[]
+            for ikey, iitem in p_clusters.items():
+                if key in iitem:
+                    clusts.append(ikey)
+            print(clusts)
+            if len(clusts)==0:
+                print("ZERO")
+                pass
+            elif len(clusts)==1:
+                print("ONE")
+                pass
+            elif len(clusts)>1:
+                print("several cluster for "+str(key))
+                print(clusts)
+                tmp_area=0
+                biggest=-1
+                for tmp_clust in clusts:
+                    if p_results[tmp_clust]["area"]>tmp_area:
+                        tmp_area=p_results[tmp_clust]["area"]
+                        biggest=tmp_clust
+                print("biggest is "+str(biggest))
+                clusts.remove(biggest)
+                if not biggest in merged:
+                    merged[biggest]=[]
+                for elem in clusts:
+                    if not elem in merged[biggest]:
+                        merged[biggest].append(elem)
+        print(merged)
+        for i in range(0,9):
+            cpt_merged2=0
+            merged2=copy.deepcopy(merged)
+            for key, vals in merged.items():
+                for val in vals:
+                    if val in merged2:                        
+                        if key in merged2:
+                            tmp=merged2[val].copy()
+                            merged2[key]=merged2[key]+tmp
+                        del merged2[val]
+                        cpt_merged2=cpt_merged2+1
+            if cpt_merged2==0:
+                break
+        merged=merged2
+        print(merged)
+        reversed={}
+        for key, vals in merged.items():
+            for val in vals:
+                reversed[val]=key
+        print("reversed")
+        print(reversed)
+        print("p_clusters")
+        print(p_clusters)
+        for key, val in reversed.items():
+            tmp=p_clusters[key].copy()
+            p_clusters[val]=p_clusters[val]+tmp
+            del p_clusters[key]
+        for key, val in p_clusters.items():
+            p_clusters[key]=list(dict.fromkeys(p_clusters[key]))
+        print(p_clusters)
+        #for key , item in p_results.items():
+        #    if key not in p_clusters:
+        #        p_clusters[key]=key
+        
+        p_clusters = dict(sorted(p_clusters.items()))
+        print("sorted")
+        print(p_clusters)
+        return p_clusters
+        
+    def calculate_intersection(self,p_results):
+        
+        #global I_RESULT_CLUSTERS
+        result_clusters={}
+        for key , item in p_results.items():
+            for key2 , item2 in p_results.items():
+                if key != key2:
+                    #print("INTER FOR "+str(key)+" "+str(key2))
+                    
+                    bbox1=item["bbox"]
+                    bbox2=item2["bbox"]
+                    inter=self.calculate_iou(bbox1, bbox2)
+                    if inter>0:
+                        print(key)
+                        print(item["label"])
+                        print(item["area"])
+                        print(item["bbox"])
+                        print(key2)
+                        print(item2["label"])
+                        print(item2["area"])
+                        print(item2["bbox"])
+                        if item["area"] > item2["area"]:
+                            if not key in result_clusters:
+                                result_clusters[key]=[]
+                            if not key in result_clusters[key]:
+                                result_clusters[key].append(key) 
+                            if not key2 in result_clusters[key]:
+                                result_clusters[key].append(key2)    
+                        else:
+                            if not key2 in result_clusters:
+                                result_clusters[key2]=[]
+                            if not key2 in result_clusters[key2]:
+                                result_clusters[key2].append(key2) 
+                            if not key in result_clusters[key2]:
+                                result_clusters[key2].append(key) 
+                        print("inter=>"+str(inter))
+        for key , item in p_results.items():
+            if key not in result_clusters:
+                result_clusters[key]=[key]
+        print("INTERSECTION")
+        print(result_clusters)
+        result_clusters=self.merge_intersections(p_results, result_clusters)
+        p_results=self.handle_clusters(p_results, result_clusters)
+        return p_results
         
     def get_boxes(self, list_w, list_h, width, height):
         returned=[]
@@ -121,17 +274,15 @@ class GeoRefOcrGUI(QApplication):
                             distance_from_origin=poly_tmp.centroid.distance(origin)
                             obj["distance_from_origin"]=distance_from_origin
                             df= pandas.concat([df, pandas.DataFrame([obj])], ignore_index=True)
-                            #RESULTS[I_RESULT]=obj
-                            self.i_result=self.i_result+1
+                            self.RESULTS[ self.I_RESULT]=obj
+                            self.I_RESULT=self.I_RESULT+1
                         
             i=i+1
         return df
         
     def tile(self, pipeline, fp, out_xls, tile_h, tile_w, offset_h, offset_w,  ratio_offset_2ndpass=0.75):
         df = pandas.DataFrame()
-        src = rioxarray.open_rasterio(fp, masked=True)
-        print(src.rio.crs)
-        src=src.rio.reproject("epsg:4326")
+        src = rioxarray.open_rasterio(fp, masked=True).rio.reproject("epsg:4326")
         src_cv2=cv2.imread(fp)
         geo_obj=XRasterBase(src)
         pipeline = keras_ocr.pipeline.Pipeline()
@@ -201,14 +352,17 @@ class GeoRefOcrGUI(QApplication):
         for box in bboxes_offset:
             df=self.cut_image(src, box, x_min, y_max, res_x, res_y, pipeline, src_cv2, shape_ori, df)
         #print(RESULTS)
-        #calculate_intersection(RESULTS)
+        tmp=self.calculate_intersection(self.RESULTS)
         #cv2.waitKey(0)
         #for index, row in df.iterrows():
         #    print(row) 
-        print(self.i_result)
-        df=df.sort_values(by=['distance_from_origin'])
-        df.to_excel(out_xls)
-        print("DONE for "+self.out_excel)
+        df2=pandas.DataFrame()
+        for key, obj in tmp.items():
+            df2= pandas.concat([df2, pandas.DataFrame([obj])], ignore_index=True)
+        print(self.I_RESULT)
+        df2=df2.sort_values(by=['distance_from_origin'])
+        df2.to_excel(self.out_excel)
+        df2.to_csv(self.out_excel+".txt",sep='\t' )
         
     def choose_input(self, x):
         file_name = QFileDialog()
@@ -224,8 +378,6 @@ class GeoRefOcrGUI(QApplication):
         
     def process_input(self):
         if self.in_tiff is not None and self.out_excel is not None:
-            os.environ["PROJ_LIB"]=self.inputProj.text()
-            print(os.environ["PROJ_LIB"])
             self.tile_w=self.input_tile_w.value()
             self.tile_h=self.input_tile_h.value()
             self.ratio_overlap=self.input_overlap_ratio.value()
@@ -234,13 +386,6 @@ class GeoRefOcrGUI(QApplication):
     
     def init_gui(self):
         self.layout = QVBoxLayout()
-        
-        labelproj=QLabel("PROJ_LIB")
-        self.layout.addWidget(labelproj)
-        
-        self.inputProj=QLineEdit()
-        self.inputProj.setText(self.default_proj_lib)
-        self.layout.addWidget(self.inputProj)
         
         self.but_input_files= QPushButton('Input files')
         self.layout.addWidget(self.but_input_files)

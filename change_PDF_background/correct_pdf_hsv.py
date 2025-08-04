@@ -205,7 +205,7 @@ def fsave_hsv():
         head, tail = os.path.split(filename)    
         new_name=tail.split(".")
         new_name=new_name[0]
-        new_name=new_name+"_"+str(CURRENT_PAGE)+"_min_"+str(CURRENT_LOWER_HSV[0])+"_"+str(CURRENT_LOWER_HSV[1])"_"+str(CURRENT_LOWER_HSV[2])+"_max_"+str(CURRENT_UPPER_HSV[0])+"_"+str(CURRENT_UPPER_HSV[1])"_"+str(CURRENT_UPPER_HSV[2])+".tif"    
+        new_name=new_name+"_"+str(CURRENT_PAGE)+"_min_"+str(CURRENT_LOWER_HSV[0])+"_"+str(CURRENT_LOWER_HSV[1])+"_"+str(CURRENT_LOWER_HSV[2])+"_max_"+str(CURRENT_UPPER_HSV[0])+"_"+str(CURRENT_UPPER_HSV[1])+"_"+str(CURRENT_UPPER_HSV[2])+".tif"    
         new_name= os.path.join(OUTPUT_FOLDER[0], new_name)
         cv2.imwrite(new_name, CURRENT_HSV_IMAGE)
         print("saved "+new_name)
@@ -309,6 +309,7 @@ def hsv_job(p_lower_white, p_upper_white ):
     result[black_pixels] = [255, 255, 255]
     result[black_pixels_ori] = [0, 0, 0]
     cv2.imshow("",result)
+    #draw_border()
     
 def slider_do_hsv():
     

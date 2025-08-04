@@ -8,6 +8,7 @@ from pdf2image import convert_from_path
 import cv2
 import re
 import os
+import math
 
 POPPLER_PATH="D:\\DEV\\CANATHIST\\POPPLER\\Release-24.02.0-0\\poppler-24.02.0\\Library\\bin"
 
@@ -17,12 +18,14 @@ window=None
 layout=None
 
 filename=None
-CURRENT_IMAGE=None
-CURRENT_IMAGE_BEFORE_BORDER=None
+#CURRENT_IMAGE=None
+CURRENT_HSV_IMAGE_WITH_BORDER=None
 CURRENT_HSV_IMAGE=None
 CURRENT_LOWER_HSV=[]
 CURRENT_UPPER_HSV=[]
-display=None
+#BORDER_INIT=False
+DISPLAY=None
+#DISPLAY_WITH_BORDER=None
 
 lab_image=None
 maxwidth, maxheight = 700, 1000
@@ -77,18 +80,18 @@ OUTPUT_FOLDER=[]
 def reinit_hsv():
     global ratio
     global image
-    global display
+    global DISPLAY
     global filename
-    display=None
+    DISPLAY=None
     print("reinit")
     print(ratio)
-    display=None
+    DISPLAY=None
     cv2.destroyWindow("")
     image=cv2.imread(filename)       
-    display=image.copy()
+    DISPLAY=image.copy()
     
-    display = cv2.resize(display, (0,0), fx=ratio, fy=ratio)
-    cv2.imshow("",display)
+    DISPLAY = cv2.resize(DISPLAY, (0,0), fx=ratio, fy=ratio)
+    cv2.imshow("",DISPLAY)
     
     
 #def display_page(img, i_image)
@@ -101,11 +104,11 @@ def display_simple(ROI):
     global currentwidth_truncate
     global ratio
     global input_zoom
-    global display
+    global DISPLAY
     ref_height= ROI.shape[0]
     ref_width= ROI.shape[1]
-    print(ref_height)
-    print(ref_width)
+    #print(ref_height)
+    #print(ref_width)
     if ratio is None:
         if ref_height>maxwidth:
             ratio=maxwidth/ref_width
@@ -116,14 +119,14 @@ def display_simple(ROI):
         #display_width=math.floor(ref_width/ratio)
         #print(maxheight)
         #print(display_width)
-        #display = resize(ROI, (display_width, maxheight))
+        #DISPLAY = resize(ROI, (display_width, maxheight))
         #ROI=cv2.cvtColor(ROI, cv2.COLOR_BGR2HSV)
         #ROI=cv2.cvtColor(ROI, cv2.COLOR_HSV2BGR)
-    display = cv2.resize(ROI, (0,0), fx=ratio, fy=ratio)        
+    DISPLAY = cv2.resize(ROI, (0,0), fx=ratio, fy=ratio)        
     #PanZoomWindow(display,"test")
-    cv2.imshow("",display)
-    currentheight_truncate=display.shape[0]
-    currentwidth_truncate=display.shape[1]
+    cv2.imshow("",DISPLAY)
+    currentheight_truncate=DISPLAY.shape[0]
+    currentwidth_truncate=DISPLAY.shape[1]
     
     
     
@@ -159,70 +162,77 @@ def load_pdf(p_filename):
 def fnext():
     global CURRENT_PAGE
     global IMG_LIST
-    global CURRENT_IMAGE
+    global CURRENT_HSV_IMAGE
     global lab_page
-    global display
+    global DISPLAY
     global ratio
+    #global BORDER_INIT
+    #BORDER_INIT=False
     if CURRENT_PAGE<len(IMG_LIST):
         ratio=None
         CURRENT_PAGE=CURRENT_PAGE+1
         print(CURRENT_PAGE)
-        CURRENT_IMAGE =IMG_LIST[CURRENT_PAGE]      
-        display=CURRENT_IMAGE.copy()
-        display_simple(display)
-        apply_current_hsv()
+        CURRENT_HSV_IMAGE =IMG_LIST[CURRENT_PAGE]      
+        #DISPLAY=CURRENT_HSV_IMAGE.copy()
+        display_simple(CURRENT_HSV_IMAGE)
+        apply_current_hsv_and_borde_display()
         lab_page.setText("Page"+str(CURRENT_PAGE+1)+"/"+str(len(IMG_LIST)))        
         
 
 def fprevious():
     global CURRENT_PAGE
     global IMG_LIST
-    global CURRENT_IMAGE
+    global CURRENT_HSV_IMAGE
     global lab_page
-    global display
+    global DISPLAY
     global ratio
+    #global BORDER_INIT
+    #BORDER_INIT=False
     if CURRENT_PAGE>0:
         ratio=None
         CURRENT_PAGE=CURRENT_PAGE-1
         print(CURRENT_PAGE)
-        CURRENT_IMAGE =IMG_LIST[CURRENT_PAGE]      
-        display=CURRENT_IMAGE.copy()
-        display_simple(display)
-        apply_current_hsv()
+        CURRENT_HSV_IMAGE =IMG_LIST[CURRENT_PAGE]      
+        #DISPLAY=CURRENT_HSV_IMAGE.copy()
+        display_simple(DISPLAY)
+        apply_current_hsv_and_borde_display(CURRENT_PAGE)
         lab_page.setText("Page"+str(CURRENT_PAGE+1)+"/"+str(len(IMG_LIST)))        
     
 
 def fsave_hsv():
     global new_name
-    global CURRENT_HSV_IMAGE
+    global CURRENT_HSV_IMAGE_WITH_BORDER
     global CURRENT_PAGE
     global CURRENT_LOWER_HSV
     global CURRENT_UPPER_HSV
     global filename
     global OUTPUT_FOLDER
     if len(OUTPUT_FOLDER)>0:
+        #draw_border_full()
         hsv_full_image_job(CURRENT_LOWER_HSV, CURRENT_UPPER_HSV )    
         head, tail = os.path.split(filename)    
         new_name=tail.split(".")
         new_name=new_name[0]
         new_name=new_name+"_"+str(CURRENT_PAGE)+"_min_"+str(CURRENT_LOWER_HSV[0])+"_"+str(CURRENT_LOWER_HSV[1])+"_"+str(CURRENT_LOWER_HSV[2])+"_max_"+str(CURRENT_UPPER_HSV[0])+"_"+str(CURRENT_UPPER_HSV[1])+"_"+str(CURRENT_UPPER_HSV[2])+".tif"    
         new_name= os.path.join(OUTPUT_FOLDER[0], new_name)
-        cv2.imwrite(new_name, CURRENT_HSV_IMAGE)
+        cv2.imwrite(new_name, CURRENT_HSV_IMAGE_WITH_BORDER)
         print("saved "+new_name)
     
 def load_images():    
     global CURRENT_PAGE
     global IMG_LIST
     global lab_page
-    global CURRENT_IMAGE
-    global display
+    global CURRENT_HSV_IMAGE
+    global DISPLAY
+    #global BORDER_INIT
+    #BORDER_INIT=False
     try:
-        CURRENT_IMAGE =IMG_LIST[CURRENT_PAGE]  
-        height, width, channels = CURRENT_IMAGE.shape
+        CURRENT_HSV_IMAGE =IMG_LIST[CURRENT_PAGE]  
+        height, width, channels = CURRENT_HSV_IMAGE.shape
         print("height "+str(height))
         print("width "+str(width))        
-        display=CURRENT_IMAGE.copy()
-        display_simple(display)
+        #DISPLAY=CURRENT_HSV_IMAGE.copy()
+        display_simple(CURRENT_HSV_IMAGE)
         lab_page.setText("Page"+str(CURRENT_PAGE+1)+"/"+str(len(IMG_LIST)))
     except:    
         traceback.print_exception(*sys.exc_info())
@@ -239,77 +249,57 @@ def choose_pdf():
   
 def resize_image(ROI, tmp):
     global input_zoom
-    global display
+    global DISPLAY
     global ratio
     ratio=tmp/100
-    display = cv2.resize(ROI, (0,0), fx=ratio, fy=ratio)
-    cv2.imshow("",display)
+    DISPLAY = cv2.resize(ROI, (0,0), fx=ratio, fy=ratio)
+    cv2.imshow("",DISPLAY)
     input_zoom.setText(str(ratio))    
   
 def slider_do_zoom(val):
     global zoom_slider
-    global CURRENT_IMAGE  
-    resize_image(CURRENT_IMAGE, val) 
+    global CURRENT_HSV_IMAGE  
+    resize_image(CURRENT_HSV_IMAGE, val) 
+    
+    
+def apply_hsv_kern(p_img, p_lower_white, p_upper_white):
+    black_pixels_ori = np.where(
+            (p_img[:, :, 0] == 0) & 
+            (p_img[:, :, 1] == 0) & 
+            (p_img[:, :, 2] == 0)
+    )
+    hsv = cv2.cvtColor(p_img, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, p_lower_white, p_upper_white)
+        #mask = 255-mask
+    mask=cv2.bitwise_not(mask)
+    result = cv2.bitwise_and(p_img, p_img, mask=mask)
+    
+    black_pixels = np.where(
+            (result[:, :, 0] == 0) & 
+            (result[:, :, 1] == 0) & 
+            (result[:, :, 2] == 0)
+    )
+    result[black_pixels] = [255, 255, 255]
+    result[black_pixels_ori] = [0, 0, 0]
+    return result
     
 def hsv_full_image_job(p_lower_white, p_upper_white ):    
-    global CURRENT_IMAGE
-    global CURRENT_IMAGE_BEFORE_BORDER
     global CURRENT_HSV_IMAGE
-    black_pixels_ori = np.where(
-            (CURRENT_IMAGE[:, :, 0] == 0) & 
-            (CURRENT_IMAGE[:, :, 1] == 0) & 
-            (CURRENT_IMAGE[:, :, 2] == 0)
-    )
-    hsv = cv2.cvtColor(CURRENT_IMAGE, cv2.COLOR_BGR2HSV)
-
-    mask = cv2.inRange(hsv, p_lower_white, p_upper_white)
-        #mask = 255-mask
-    mask=cv2.bitwise_not(mask)
-    result = cv2.bitwise_and(CURRENT_IMAGE, CURRENT_IMAGE, mask=mask)
-        
-   
-    #result[mask==0] = (255, 255, 255)
-    black_pixels = np.where(
-            (result[:, :, 0] == 0) & 
-            (result[:, :, 1] == 0) & 
-            (result[:, :, 2] == 0)
-    )
-
-    # set those pixels to white
-    result[black_pixels] = [255, 255, 255]
-    result[black_pixels_ori] = [0, 0, 0]
-    CURRENT_HSV_IMAGE=result
-    CURRENT_IMAGE_BEFORE_BORDER=CURRENT_HSV_IMAGE.copy()
+    global CURRENT_HSV_IMAGE_WITH_BORDER
+    CURRENT_HSV_IMAGE=apply_hsv_kern(CURRENT_HSV_IMAGE,p_lower_white, p_upper_white )
+    CURRENT_HSV_IMAGE_WITH_BORDER=draw_border(CURRENT_HSV_IMAGE, 1.0)
+    #draw_border_full()
+    #CURRENT_HSV_IMAGE_WITH_BORDER=apply_hsv_kern(CURRENT_HSV_IMAGE_WITH_BORDER,p_lower_white, p_upper_white )
     
-def hsv_job(p_lower_white, p_upper_white ):
-    global display
-    black_pixels_ori = np.where(
-            (display[:, :, 0] == 0) & 
-            (display[:, :, 1] == 0) & 
-            (display[:, :, 2] == 0)
-    )
-    hsv = cv2.cvtColor(display, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, p_lower_white, p_upper_white)
-        #mask = 255-mask
-    mask=cv2.bitwise_not(mask)
-    result = cv2.bitwise_and(display, display, mask=mask)
-        
-    # set those pixels to white
-    #result[black_pixels] = [255, 255, 255]
-        
-    #result = imgcopy.copy()
-    #result[mask==0] = (255, 255, 255)
-    black_pixels = np.where(
-            (result[:, :, 0] == 0) & 
-            (result[:, :, 1] == 0) & 
-            (result[:, :, 2] == 0)
-    )
-
-    # set those pixels to white
-    result[black_pixels] = [255, 255, 255]
-    result[black_pixels_ori] = [0, 0, 0]
+   
+    
+  
+def hsv_display_job(p_lower_white, p_upper_white ):
+    global DISPLAY
+    result=apply_hsv_kern(DISPLAY, p_lower_white, p_upper_white)
+    draw_border(result, ratio)
     cv2.imshow("",result)
-    #draw_border()
+
     
 def slider_do_hsv():
     
@@ -360,7 +350,7 @@ def slider_do_hsv():
         upper = np.array([h_max, s_max, v_max])
         CURRENT_LOWER_HSV=lower
         CURRENT_UPPER_HSV=upper
-        hsv_job(lower, upper)
+        hsv_display_job(CURRENT_LOWER_HSV, CURRENT_UPPER_HSV)
         # Convert to HSV format and color threshold
         
     
@@ -401,78 +391,67 @@ def choose_output():
     OUTPUT_FOLDER=[file]
     lab_folder.setText("Output folder "+str(OUTPUT_FOLDER[0]))
   
-def draw_border():
-    global input_border_top
-    global input_border_bottom
-    global input_border_left
-    global input_border_right
-    global CURRENT_HSV_IMAGE  
-    global CURRENT_IMAGE_BEFORE_BORDER
-    global display
-    
-    if CURRENT_IMAGE_BEFORE_BORDER is not None:
-        CURRENT_HSV_IMAGE=CURRENT_IMAGE_BEFORE_BORDER
-    
-        
-    height, width, channels = CURRENT_HSV_IMAGE.shape
-    
+def draw_border_logic(p_img, input_top, input_left, input_bottom, input_right):
+    height, width, channels = p_img.shape
+    print([height, width])
     color = (255, 255, 255)
-    input_top=int(input_border_top.text())
-    input_left=int(input_border_left.text())
-    input_bottom=int(input_border_bottom.text())
-    input_right=int(input_border_right.text())
     if input_top>0:
         start_point_top=(0,0)
         end_point_top=(width, input_top)
         #print("top")
         #print(start_point_top)
         #print(start_point_top)
-        CURRENT_HSV_IMAGE = cv2.rectangle(CURRENT_HSV_IMAGE, start_point_top, end_point_top, color, -1) 
+        p_img = cv2.rectangle(p_img, start_point_top, end_point_top, color, -1) 
     if input_left>0:
         start_point_left=(0,0)        
         end_point_left=(input_left, height)
-        #print("left")
-        #print(start_point_left)
-        #print(end_point_left)
-        CURRENT_HSV_IMAGE = cv2.rectangle(CURRENT_HSV_IMAGE, start_point_left, end_point_left, color, -1)
+        print("left")
+        print(start_point_left)
+        print(end_point_left)
+        p_img = cv2.rectangle(p_img, start_point_left, end_point_left, color, -1)
     if input_bottom>0:        
         start_point_bottom=(0,height-input_bottom)
         end_point_bottom=(width, height)
         #print("bottom")
         #print(start_point_bottom)
         #print(end_point_bottom)        
-        CURRENT_HSV_IMAGE = cv2.rectangle(CURRENT_HSV_IMAGE, start_point_bottom, end_point_bottom,  color, -1) 
+        p_img = cv2.rectangle(p_img, start_point_bottom, end_point_bottom,  color, -1) 
     if input_right>0:        
         start_point_right=(width-input_right,0)
         end_point_right=(width, height)
         #print("right")
         #print(start_point_right)
         #print(end_point_right)
-        CURRENT_HSV_IMAGE = cv2.rectangle(CURRENT_HSV_IMAGE, start_point_right, end_point_right, color, -1)        
-    display=CURRENT_HSV_IMAGE.copy()
-    display_simple(display)
+        p_img = cv2.rectangle(p_img, start_point_right, end_point_right,  color, -1)        
+    return p_img
     
-def apply_current_hsv():
-    global CURRENT_LOWER_HSV
-    global CURRENT_UPPER_HSV  
-    global CURRENT_IMAGE
-    global lower_white
-    global upper_white
-    height, width, channels = CURRENT_IMAGE.shape
-    print("height "+str(height))
-    print("width "+str(width))
-    if CURRENT_LOWER_HSV is None:
-        CURRENT_LOWER_HSV=[]
-    if CURRENT_UPPER_HSV is None:
-        CURRENT_UPPER_HSV=[]
-    if len(CURRENT_LOWER_HSV)==0:
-        CURRENT_LOWER_HSV=lower_white
-    if len(CURRENT_UPPER_HSV)==0:
-        CURRENT_UPPER_HSV=upper_white
     
-    hsv_job(CURRENT_LOWER_HSV, CURRENT_UPPER_HSV)
-    hsv_full_image_job(CURRENT_LOWER_HSV, CURRENT_UPPER_HSV )
-    draw_border()
+    
+def draw_border(p_img, p_ratio):
+    global input_border_top
+    global input_border_bottom
+    global input_border_left
+    global input_border_right
+    
+    
+    input_top=int(input_border_top.text())
+    input_left=int(input_border_left.text())
+    input_bottom=int(input_border_bottom.text())
+    input_right=int(input_border_right.text())      
+    
+    input_top=int(input_top*p_ratio)
+    input_left=int(input_left*p_ratio)
+    input_bottom=int(input_bottom*p_ratio)
+    input_right=int(input_right*p_ratio)    
+    returned=draw_border_logic(p_img, input_top, input_left, input_bottom, input_right)
+    return returned
+    #display_simple(DISPLAY)
+   
+
+    
+def apply_current_hsv_and_borde_display():
+    slider_do_hsv()
+
     
 def start():
     global app
@@ -632,7 +611,7 @@ def start():
         
         but_appy=QPushButton('Apply')
         layout.addWidget(but_appy)
-        but_appy.clicked.connect(apply_current_hsv)
+        but_appy.clicked.connect(apply_current_hsv_and_borde_display)
         
         but_whitepreset=QPushButton('White preset  :')
         layout.addWidget(but_whitepreset)

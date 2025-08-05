@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout , QFileDialog, QSlider, QLabel, QLineEdit
+from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QGridLayout , QFileDialog, QSlider, QLabel, QLineEdit
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 import traceback
@@ -77,6 +77,9 @@ lab_folder=None
 
 OUTPUT_FOLDER=[]
 
+input_dpi=None
+DPI=300
+
 def reinit_hsv():
     global ratio
     global image
@@ -144,9 +147,11 @@ def load_pdf(p_filename):
     global CURRENT_PAGE
     global lab_page
     global IMG_LIST
+    global input_dpi
     IMG_LIST=[]
     CURRENT_PAGE=0
-    pdf_file = convert_from_path(p_filename,poppler_path=POPPLER_PATH, dpi=600)
+    p_dpi=str(input_dpi.text())
+    pdf_file = convert_from_path(p_filename,poppler_path=POPPLER_PATH, dpi=p_dpi)
     
     for (i,page) in enumerate(pdf_file) :
         #cv2.imshow('image',page)
@@ -366,12 +371,12 @@ def preset_white_hsv():
     slider_s_max.setValue(upper_white[1])
     slider_v_max.setValue(upper_white[2])
     
-def slider_hsv(p_layout, label_text, slider, input,  initial_value, max_level):
+def slider_hsv(p_layout, label_text, slider, input,  initial_value, max_level, row, col):
     tmp_label=QLabel(label_text)
-    p_layout.addWidget(tmp_label)
+    p_layout.addWidget(tmp_label, row, col)
     
     input.setText(str(initial_value))
-    layout.addWidget(input)   
+    p_layout.addWidget(input, row+1, col)   
 
     slider.setFocusPolicy(Qt.StrongFocus)
     slider.setTickPosition(QSlider.TicksBothSides)
@@ -381,7 +386,7 @@ def slider_hsv(p_layout, label_text, slider, input,  initial_value, max_level):
     
     slider.setValue(initial_value)
     slider.valueChanged.connect(slider_do_hsv)
-    p_layout.addWidget(slider)
+    p_layout.addWidget(slider, row+2, col)
     
 def choose_output():
     global OUTPUT_FOLDER
@@ -459,6 +464,7 @@ def start():
     global layout
     
     global input_zoom
+    global input_dpi
     global lab_page
     global maxheight
     global maxwidth
@@ -498,46 +504,53 @@ def start():
         window = QWidget()
         window.setMinimumWidth(700)
         
-        layout = QVBoxLayout()
+        layout = QGridLayout()
         
       
         
         but_pdf=QPushButton('Select PDF file  :')
-        layout.addWidget(but_pdf)
+        layout.addWidget(but_pdf, 0, 0)
         but_pdf.clicked.connect(choose_pdf)
         
         
         
         but_output=QPushButton('Choose output image folder')
-        layout.addWidget(but_output)
+        layout.addWidget(but_output, 0, 1)
         but_output.clicked.connect(choose_output)
         
+       
+        
         lab_folder=QLabel()
-        layout.addWidget(lab_folder)
+        layout.addWidget(lab_folder, 1, 0)
         
         but_previous=QPushButton('<<')
-        layout.addWidget(but_previous)
+        layout.addWidget(but_previous, 2, 0)
         but_previous.clicked.connect(fprevious)
         
         but_next=QPushButton('>>')
-        layout.addWidget(but_next)
+        layout.addWidget(but_next, 2, 1)
         but_next.clicked.connect(fnext)
         
+        
+
+        
         but_save_hsv=QPushButton('Save HSV IMAGE')
-        layout.addWidget(but_save_hsv)
+        layout.addWidget(but_save_hsv, 3, 0)
         but_save_hsv.clicked.connect(fsave_hsv)
+        
+        
         
         lab_page=QLabel()
         lab_page.setText("Page")
-        layout.addWidget(lab_page)  
+        layout.addWidget(lab_page, 4, 0)  
         
         lab_zoom=QLabel()
         lab_zoom.setText("Zoom level")
-        layout.addWidget(lab_zoom)            
+        layout.addWidget(lab_zoom, 4, 1)            
            
         
         input_zoom=QLineEdit()
-        layout.addWidget(input_zoom)
+        layout.addWidget(input_zoom, 5, 1)
         
         zoom_slider= QSlider(Qt.Horizontal)
         zoom_slider.setFocusPolicy(Qt.StrongFocus)
@@ -546,80 +559,89 @@ def start():
         zoom_slider.setSingleStep(1)
         zoom_slider.setRange(1, 100)
         zoom_slider.valueChanged.connect(slider_do_zoom)
-        layout.addWidget(zoom_slider)
+        layout.addWidget(zoom_slider, 6, 1)
         
         
         
         input_h_min=QLineEdit()
         slider_h_min=QSlider(Qt.Horizontal)
-        slider_hsv(layout, "H Min",slider_h_min, input_h_min, lower_white[0], 179)
-        
-        input_s_min=QLineEdit()
-        slider_s_min=QSlider(Qt.Horizontal)
-        slider_hsv(layout, "S Min",slider_s_min, input_s_min, lower_white[1], 255)
-        
-        input_v_min=QLineEdit()
-        slider_v_min=QSlider(Qt.Horizontal)
-        slider_hsv(layout, "V Min",slider_v_min, input_v_min, lower_white[2], 255)
+        slider_hsv(layout, "H Min",slider_h_min, input_h_min, lower_white[0], 179, 7, 0)
         
         input_h_max=QLineEdit()
         slider_h_max=QSlider(Qt.Horizontal)
-        slider_hsv(layout, "H Max",slider_h_max, input_h_max, upper_white[0],179)
+        slider_hsv(layout, "H Max",slider_h_max, input_h_max, upper_white[0],179, 7, 1)
+        
+        input_s_min=QLineEdit()
+        slider_s_min=QSlider(Qt.Horizontal)
+        slider_hsv(layout, "S Min",slider_s_min, input_s_min, lower_white[1], 255, 10, 0)
         
         input_s_max=QLineEdit()
         slider_s_max=QSlider(Qt.Horizontal)
-        slider_hsv(layout, "S Max",slider_s_max, input_s_max, upper_white[1], 255)
+        slider_hsv(layout, "S Max",slider_s_max, input_s_max, upper_white[1], 255, 10, 1)
+        
+        input_v_min=QLineEdit()
+        slider_v_min=QSlider(Qt.Horizontal)
+        slider_hsv(layout, "V Min",slider_v_min, input_v_min, lower_white[2], 255, 13, 0)       
         
         input_v_max=QLineEdit()
         slider_v_max=QSlider(Qt.Horizontal)
-        slider_hsv(layout, "V Max",slider_v_max, input_v_max, upper_white[2], 255)
+        slider_hsv(layout, "V Max",slider_v_max, input_v_max, upper_white[2], 255, 13, 1)
         
         
         
         
         lab_border_top=QLabel()
         lab_border_top.setText("Border top")
-        layout.addWidget(lab_border_top)      
+        layout.addWidget(lab_border_top, 16, 0)      
         
         input_border_top=QLineEdit()
         input_border_top.setText(str(BORDER_UP))
-        layout.addWidget(input_border_top)
+        layout.addWidget(input_border_top, 16, 1)
         
         lab_border_bottom=QLabel()
         lab_border_bottom.setText("Border bottom")
-        layout.addWidget(lab_border_bottom)  
+        layout.addWidget(lab_border_bottom, 17, 0)  
         
         input_border_bottom=QLineEdit()
         input_border_bottom.setText(str(BORDER_DOWN))
-        layout.addWidget(input_border_bottom)
+        layout.addWidget(input_border_bottom, 17, 1)
         
         lab_border_left=QLabel()
         lab_border_left.setText("Border left")
-        layout.addWidget(lab_border_left)  
+        layout.addWidget(lab_border_left, 18, 0)  
         
         input_border_left=QLineEdit()
         input_border_left.setText(str(BORDER_LEFT))
-        layout.addWidget(input_border_left)
+        layout.addWidget(input_border_left, 18, 1)
         
         lab_border_right=QLabel()
         lab_border_right.setText("Border right")
-        layout.addWidget(lab_border_right)  
+        layout.addWidget(lab_border_right, 19, 0)  
         
         input_border_right=QLineEdit()
         input_border_right.setText(str(BORDER_RIGHT))
-        layout.addWidget(input_border_right)
+        layout.addWidget(input_border_right, 19, 1)
         
         but_appy=QPushButton('Apply')
-        layout.addWidget(but_appy)
+        layout.addWidget(but_appy, 20, 0)
         but_appy.clicked.connect(apply_current_hsv_and_borde_display)
         
         but_whitepreset=QPushButton('White preset  :')
-        layout.addWidget(but_whitepreset)
+        layout.addWidget(but_whitepreset, 20, 1)
         but_whitepreset.clicked.connect(preset_white_hsv)
         
         but_reset=QPushButton('Reset HSV  :')
-        layout.addWidget(but_reset)
+        layout.addWidget(but_reset, 21, 0)
         but_reset.clicked.connect(reinit_hsv)
+        
+        lab_dpi=QLabel()
+        lab_dpi.setText("DPI")
+        layout.addWidget(lab_dpi, 21, 1)  
+        
+        
+        input_dpi=QLineEdit()
+        input_dpi.setText(str(DPI))
+        layout.addWidget(input_dpi, 22, 1)
         
         window.setLayout(layout)
         window.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint)

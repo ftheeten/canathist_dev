@@ -74,6 +74,7 @@ CURRENT_PAGE=0
 IMG_LIST=[]
 lab_page=None
 lab_folder=None
+lab_size=None
 
 OUTPUT_FOLDER=[]
 
@@ -81,20 +82,7 @@ input_dpi=None
 DPI=300
 
 def reinit_hsv():
-    global ratio
-    global image
-    global DISPLAY
-    global filename
-    DISPLAY=None
-    print("reinit")
-    print(ratio)
-    DISPLAY=None
-    cv2.destroyWindow("")
-    image=cv2.imread(filename)       
-    DISPLAY=image.copy()
-    
-    DISPLAY = cv2.resize(DISPLAY, (0,0), fx=ratio, fy=ratio)
-    cv2.imshow("",DISPLAY)
+    load_images()
     
     
 #def display_page(img, i_image)
@@ -161,7 +149,7 @@ def load_pdf(p_filename):
         page_arr = cv2.cvtColor(page_arr,cv2.COLOR_BGR2RGB)
         IMG_LIST.append(page_arr)
     print("READY")
-    lab_page.setText("Page"+str(CURRENT_PAGE+1)+"/"+str(len(IMG_LIST)))
+    lab_page.setText("Page "+str(CURRENT_PAGE+1)+"/"+str(len(IMG_LIST)))
     load_images()
  
 def fnext():
@@ -177,11 +165,13 @@ def fnext():
         ratio=None
         CURRENT_PAGE=CURRENT_PAGE+1
         print(CURRENT_PAGE)
-        CURRENT_HSV_IMAGE =IMG_LIST[CURRENT_PAGE]      
+        CURRENT_HSV_IMAGE =IMG_LIST[CURRENT_PAGE]
+        height, width, channels = CURRENT_HSV_IMAGE.shape        
+        lab_size.setText("Height: "+str(height)+ " width: "+str(width))        
         #DISPLAY=CURRENT_HSV_IMAGE.copy()
         display_simple(CURRENT_HSV_IMAGE)
-        apply_current_hsv_and_borde_display()
-        lab_page.setText("Page"+str(CURRENT_PAGE+1)+"/"+str(len(IMG_LIST)))        
+        apply_current_hsv_and_border_display()
+        lab_page.setText("Page "+str(CURRENT_PAGE+1)+"/"+str(len(IMG_LIST)))        
         
 
 def fprevious():
@@ -197,10 +187,12 @@ def fprevious():
         ratio=None
         CURRENT_PAGE=CURRENT_PAGE-1
         print(CURRENT_PAGE)
-        CURRENT_HSV_IMAGE =IMG_LIST[CURRENT_PAGE]      
+        CURRENT_HSV_IMAGE =IMG_LIST[CURRENT_PAGE]
+        height, width, channels = CURRENT_HSV_IMAGE.shape        
+        lab_size.setText("Height: "+str(height)+ " width: "+str(width))        
         #DISPLAY=CURRENT_HSV_IMAGE.copy()
         display_simple(DISPLAY)
-        apply_current_hsv_and_borde_display(CURRENT_PAGE)
+        apply_current_hsv_and_border_display()
         lab_page.setText("Page"+str(CURRENT_PAGE+1)+"/"+str(len(IMG_LIST)))        
     
 
@@ -227,15 +219,15 @@ def load_images():
     global CURRENT_PAGE
     global IMG_LIST
     global lab_page
+    global lab_size
     global CURRENT_HSV_IMAGE
     global DISPLAY
     #global BORDER_INIT
     #BORDER_INIT=False
     try:
         CURRENT_HSV_IMAGE =IMG_LIST[CURRENT_PAGE]  
-        height, width, channels = CURRENT_HSV_IMAGE.shape
-        print("height "+str(height))
-        print("width "+str(width))        
+        height, width, channels = CURRENT_HSV_IMAGE.shape        
+        lab_size.setText("Height: "+str(height)+ " width: "+str(width))
         #DISPLAY=CURRENT_HSV_IMAGE.copy()
         display_simple(CURRENT_HSV_IMAGE)
         lab_page.setText("Page"+str(CURRENT_PAGE+1)+"/"+str(len(IMG_LIST)))
@@ -370,6 +362,7 @@ def preset_white_hsv():
     slider_h_max.setValue(upper_white[0])
     slider_s_max.setValue(upper_white[1])
     slider_v_max.setValue(upper_white[2])
+    apply_current_hsv_and_border_display()
     
 def slider_hsv(p_layout, label_text, slider, input,  initial_value, max_level, row, col):
     tmp_label=QLabel(label_text)
@@ -454,7 +447,7 @@ def draw_border(p_img, p_ratio):
    
 
     
-def apply_current_hsv_and_borde_display():
+def apply_current_hsv_and_border_display():
     slider_do_hsv()
 
     
@@ -465,7 +458,6 @@ def start():
     
     global input_zoom
     global input_dpi
-    global lab_page
     global maxheight
     global maxwidth
     global zoom_slider
@@ -485,6 +477,8 @@ def start():
     global slider_v_max
     
     global lab_folder
+    global lab_size
+    global lab_page
     
     global BORDER_UP
     global BORDER_DOWN
@@ -538,6 +532,9 @@ def start():
         layout.addWidget(but_save_hsv, 3, 0)
         but_save_hsv.clicked.connect(fsave_hsv)
         
+        lab_size=QLabel()
+        lab_size.setText("Size")
+        layout.addWidget(lab_size, 3, 1)  
         
         
         lab_page=QLabel()
@@ -624,13 +621,13 @@ def start():
         
         but_appy=QPushButton('Apply')
         layout.addWidget(but_appy, 20, 0)
-        but_appy.clicked.connect(apply_current_hsv_and_borde_display)
+        but_appy.clicked.connect(apply_current_hsv_and_border_display)
         
-        but_whitepreset=QPushButton('White preset  :')
+        but_whitepreset=QPushButton('Reset HSV  :')
         layout.addWidget(but_whitepreset, 20, 1)
         but_whitepreset.clicked.connect(preset_white_hsv)
         
-        but_reset=QPushButton('Reset HSV  :')
+        but_reset=QPushButton('Original image  :')
         layout.addWidget(but_reset, 21, 0)
         but_reset.clicked.connect(reinit_hsv)
         

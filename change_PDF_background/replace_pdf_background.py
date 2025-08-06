@@ -19,6 +19,9 @@ layout=None
 filename_pdf=None
 filename_img=None
 
+DEFAULT_QUAL=5
+input_qual=None
+
 
 def choose_pdf():
     global window
@@ -38,12 +41,14 @@ def choose_images():
     
 def go():
     global filename_pdf
-    global filename_img    
+    global filename_img   
+    global input_qual
     reader= pypdf.PdfReader(filename_pdf)
     pattern = re.compile(r"\.pdf", re.IGNORECASE)
     filename_pdf_w=pattern.sub("_new_bck.pdf", filename_pdf)
     print(filename_pdf_w)
     writer=pypdf.PdfWriter()
+    
     print(len(reader.pages))
     if len(reader.pages)==len(filename_img):
         print("go_replace")
@@ -57,9 +62,10 @@ def go():
             print(filename_img[i])
             img=PIL.Image.open(filename_img[i],mode="r")
             membuf = BytesIO()
-            img.save(membuf, format="png")
+            img.save(membuf, format="JPEG", optimize=True, quality=int(input_qual.text()))
             img2 = PIL.Image.open(membuf)
-            writer.pages[i].images[0].replace(img2, quality=30)            
+            writer.pages[i].images[0].replace(img2, quality=int(input_qual.text())) 
+
         writer.write(filename_pdf_w)
         print("done "+filename_pdf_w)
         """
@@ -77,6 +83,7 @@ def start():
     global app
     global window
     global layout
+    global input_qual
     
     try:
         app = QApplication([])
@@ -96,6 +103,14 @@ def start():
         but_go=QPushButton('Go replace background  :')
         layout.addWidget(but_go)
         but_go.clicked.connect(go)
+        
+        lab_qual=QLabel()
+        lab_qual.setText("Quality")
+        layout.addWidget(lab_qual)
+        
+        input_qual=QLineEdit()
+        input_qual.setText(str(DEFAULT_QUAL))
+        layout.addWidget(input_qual)
         
         window.setLayout(layout)
         window.setWindowFlags(Qt.WindowType.WindowStaysOnTopHint)
